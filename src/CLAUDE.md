@@ -1,0 +1,1 @@
+- In zig 0.15, array lists are not initiated with allocators.  instead allocators are passed through the individual functions
