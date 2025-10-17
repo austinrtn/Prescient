@@ -82,6 +82,40 @@ pub const ComponentMetaData = struct {
 pub const ComponentRegistry = struct {
     const Self = @This();
 
+    /// Hash-to-index mapping entry for fast lookups.
+    const HashIndexEntry = struct {
+        hash: u64,
+        index: usize,
+    };
+
+    /// Compile-time sorted hash-to-index lookup table.
+    /// Allows binary search for O(log n) hash lookups instead of O(n).
+    pub const hash_to_index_table = blk: {
+        const enum_fields = @typeInfo(ComponentName).@"enum".fields;
+        var table: [enum_fields.len]HashIndexEntry = undefined;
+
+        // Build hash→index mapping
+        for (enum_fields, 0..) |field, i| {
+            const component_name: ComponentName = @enumFromInt(field.value);
+            const hash = hashComponentData(component_name);
+            table[i] = .{ .hash = hash, .index = i };
+        }
+
+        // Sort by hash for binary search (insertion sort at comptime)
+        const len = table.len;
+        var i: usize = 1;
+        while (i < len) : (i += 1) {
+            const key = table[i];
+            var j: usize = i;
+            while (j > 0 and table[j - 1].hash > key.hash) : (j -= 1) {
+                table[j] = table[j - 1];
+            }
+            table[j] = key;
+        }
+
+        break :blk table;
+    };
+
     /// Runtime-accessible lookup table for component metadata.
     /// Generated at compile time but can be accessed at runtime because
     /// it only contains runtime-safe metadata (no `type` fields).
@@ -118,13 +152,26 @@ pub const ComponentRegistry = struct {
     }
 
     /// Look up runtime-safe metadata for a component by hash at runtime.
+    /// Uses binary search on sorted hash table for O(log n) performance.
     /// Panics if hash doesn't match any registered component.
     pub fn getRuntimeMeta(hash: u64) ComponentRuntimeMeta {
-        for(Self.runtime_meta_table) |meta| {
-            if(hash == meta.type_hash) {
-                return meta;
+        // Binary search in sorted hash_to_index_table
+        var left: usize = 0;
+        var right: usize = Self.hash_to_index_table.len;
+
+        while (left < right) {
+            const mid = left + (right - left) / 2;
+            const entry = Self.hash_to_index_table[mid];
+
+            if (entry.hash == hash) {
+                return Self.runtime_meta_table[entry.index];
+            } else if (entry.hash < hash) {
+                left = mid + 1;
+            } else {
+                right = mid;
             }
         }
+
         std.debug.panic("Unknown component hash: 0x{x}", .{hash});
     }
 };
