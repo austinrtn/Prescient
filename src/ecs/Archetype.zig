@@ -133,6 +133,11 @@ pub const Archetype = struct {
     pub fn init(allocator: std.mem.Allocator, component_ids: []const u64) !Self {
         var component_arrays: ArrayList(ComponentArrayInterface) = .empty;
         try component_arrays.ensureTotalCapacity(allocator, component_ids.len);
+        //sort IDs
+        var sorted_ids = try allocator.dupe(u64, component_ids);
+        defer allocator.free(sorted_ids);
+        std.mem.sort(u64, &sorted_ids, {}, comptime std.sort.asc(u64));
+        
 
         // For each runtime hash, find its compile-time component type
         outer: for(component_ids) |hash| {
@@ -162,8 +167,8 @@ pub const Archetype = struct {
 
         return Self {
             .allocator = allocator,
-            .signature = std.hash.Murmur2_64.hash(std.mem.sliceAsBytes(component_ids)),
-            .component_ids = component_ids,
+            .component_ids = sorted_ids,
+            .signature = std.hash.Murmur2_64.hash(std.mem.sliceAsBytes(sorted_ids)),
             .entities = .empty,
             .component_arrays = component_arrays,
         };
