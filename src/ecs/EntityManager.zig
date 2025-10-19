@@ -18,8 +18,8 @@ pub const Entity = struct {
 pub const EntitySlot = struct {
     index: u32,
     generation: u32 = 0,
-    pool_signature: u64,
-    archetype_signature: ?u64,
+    pool_signature: u64 = undefined,
+    archetype_signature: u64 = undefined,
     archetype_index: u32 = undefined,
 
     pub fn getEntity(self: *@This()) Entity {

@@ -17,6 +17,36 @@ const CR = @import("ComponentRegistry.zig");
 /// Uses a virtual table pattern (function pointers) to call into
 /// concrete ComponentArray instances without knowing their specific type.
 /// This allows storing arrays of different component types in a homogeneous list.
+
+/// Helper to create a consistent signature from unsorted component IDs.
+/// Sorts the component IDs to ensure that archetypes with the same components
+/// but in different order produce the same signature.
+pub const SortedSignature = struct {
+    ids: []u64,
+    signature: u64,
+
+    pub fn init(allocator: std.mem.Allocator, component_ids: []const u64) !SortedSignature {
+        // Duplicate the array so we can sort it
+        const sorted_ids = try allocator.dupe(u64, component_ids);
+        errdefer allocator.free(sorted_ids);
+
+        // Sort in-place for consistent ordering
+        std.mem.sort(u64, sorted_ids, {}, std.sort.asc(u64));
+
+        // Hash the sorted IDs
+        const signature = std.hash.Murmur2_64.hash(std.mem.sliceAsBytes(sorted_ids));
+
+        return .{
+            .ids = sorted_ids,
+            .signature = signature,
+        };
+    }
+
+    pub fn deinit(self: *SortedSignature, allocator: std.mem.Allocator) void {
+        allocator.free(self.ids);
+    }
+};
+
 pub const ComponentArrayInterface = struct {
     ptr: *anyopaque,  // Pointer to concrete ComponentArray instance
     addEntityFn: *const fn(*anyopaque, std.mem.Allocator, entity: usize) anyerror!void,
@@ -133,11 +163,10 @@ pub const Archetype = struct {
     pub fn init(allocator: std.mem.Allocator, component_ids: []const u64) !Self {
         var component_arrays: ArrayList(ComponentArrayInterface) = .empty;
         try component_arrays.ensureTotalCapacity(allocator, component_ids.len);
-        //sort IDs
-        var sorted_ids = try allocator.dupe(u64, component_ids);
-        defer allocator.free(sorted_ids);
-        std.mem.sort(u64, &sorted_ids, {}, comptime std.sort.asc(u64));
-        
+
+        // Create sorted signature for consistent archetype identification
+        var sorted_sig = try SortedSignature.init(allocator, component_ids);
+        errdefer sorted_sig.deinit(allocator);
 
         // For each runtime hash, find its compile-time component type
         outer: for(component_ids) |hash| {
@@ -167,8 +196,8 @@ pub const Archetype = struct {
 
         return Self {
             .allocator = allocator,
-            .component_ids = sorted_ids,
-            .signature = std.hash.Murmur2_64.hash(std.mem.sliceAsBytes(sorted_ids)),
+            .component_ids = sorted_sig.ids,  // Transfer ownership of sorted IDs
+            .signature = sorted_sig.signature,
             .entities = .empty,
             .component_arrays = component_arrays,
         };
@@ -207,13 +236,14 @@ pub const Archetype = struct {
 
     /// Clean up all resources used by this archetype.
     /// Calls deinit on all component arrays (which frees their allocations)
-    /// then frees the arrays list and entities list.
+    /// then frees the arrays list, entities list, and component_ids.
     pub fn deinit(self: *Self) void {
         for (self.component_arrays.items) |*comp_array| {
             comp_array.deinit(self.allocator);
         }
         self.component_arrays.deinit(self.allocator);
         self.entities.deinit(self.allocator);
+        self.allocator.free(self.component_ids);
     }
 
     /// Get component data for an entity with compile-time type safety.
