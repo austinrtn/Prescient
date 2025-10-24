@@ -1,10 +1,10 @@
 const std = @import("std");
 
-const ar = @import("../registries/ArchetypeRegistry.zig");
+// const ar = @import("../registries/ArchetypeRegistry.zig"); // TODO: Fix import path
 
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
-const ComponentRegistry = @import("../registries/ComponentRegistry.zig");
+const ComponentRegistry = @import("ComponentRegistry.zig");
 const ComponentName = ComponentRegistry.ComponentName;
 const getComponentByName = ComponentRegistry.GetComponentByName;
 

@@ -5,6 +5,7 @@ const std = @import("std");
 test {
     _ = @import("ecs/ComponentRegistry.zig");
     _ = @import("ecs/Archetype.zig");
+    _ = @import("ecs/ArchetypePool.zig");
 }
 
 pub fn bufferedPrint() !void {
