@@ -41,8 +41,11 @@ pub fn ArchetypePool(comptime pool_components: []const CR.ComponentName, comptim
         break :blk set;
     };
 
+    const pool_mask = MM.Comptime.createMask(pool_components);
+
     return struct {
         const Self = @This();
+        const signature = pool_mask;
 
         const MoveDirection = enum {
             adding,
@@ -201,7 +204,6 @@ pub fn ArchetypePool(comptime pool_components: []const CR.ComponentName, comptim
         fn validateComponents(comptime components: []const CR.ComponentName) void {
             for(components) |component|{
                 Self.validateComponent(component);
-            
             }
         }
 

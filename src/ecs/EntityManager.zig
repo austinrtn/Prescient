@@ -7,6 +7,7 @@ const Allocator = std.mem.Allocator;
 const ComponentRegistry = @import("ComponentRegistry.zig");
 const ComponentName = ComponentRegistry.ComponentName;
 const getComponentByName = ComponentRegistry.GetComponentByName;
+const Mask = ComponentRegistry.ComponentMask;
 
 pub const EntityManagerErrors = error{NoAvailableEntities};
 
@@ -18,9 +19,9 @@ pub const Entity = struct {
 pub const EntitySlot = struct {
     index: u32,
     generation: u32 = 0,
-    pool_signature: u64 = undefined,
-    archetype_signature: u64 = undefined,
-    archetype_index: u32 = undefined,
+    pool_siganture: u64 = undefined,
+    mask: Mask = undefined,
+    storage_index: u32 = undefined,
 
     pub fn getEntity(self: *@This()) Entity {
         return .{.index = self.index, .generation = self.generation};
@@ -33,7 +34,6 @@ pub const EntityManager = struct {
     allocator: Allocator,
     entitySlots: ArrayList(EntitySlot),
     availableEntities: ArrayList(usize),
-    archetypeManager: *ar.ArchetypeManager,
 
     pub fn init(allocator: Allocator, archetypeManager: *ar.ArchetypeManager) !Self {
         const entityManager: Self = .{
