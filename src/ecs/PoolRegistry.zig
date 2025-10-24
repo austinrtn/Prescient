@@ -4,10 +4,65 @@ const ArchPool = @import("ArchetypePool.zig");
 
 pub const MovementPool = ArchPool.ArchetypePool(&.{.Position, .Velocity}, true);
 
+pub const pool_name = enum(u32) {
+    MovementPool,
+};
+
 pub const pool_types = [_]type{
     MovementPool,
 };
 
-pub const PoolManager = blk
+pub fn getPoolFromName(comptime pool: pool_name) type {
+    return pool_types[@intFromEnum(pool)];
+}
+
+pub fn PoolManager() type {
+    const pool_storage = blk: {
+        var fields: [pool_types.len]std.builtin.Type.StructField = undefined;
+       
+        for(pool_types, 0..) |pool, i| {
+            const name = @tagName(@as(pool_name,@enumFromInt(i)));
+            fields[i] = std.builtin.Type.StructField{
+                .name = name,
+                .type = ?*pool,
+                .alignment = @alignOf(?*pool),
+                .default_value_ptr = null,
+                .is_comptime = false,
+            };
+        }
+
+        break :blk @Type(.{
+            .@"struct" = .{
+                .layout = .auto,
+                .fields = &fields,
+                .decls = &.{},
+                .is_tuple = false,
+            },
+        });
+    };
+
+    return struct {
+        const Self = @This();
+        storage: pool_storage = undefined, 
+
+        pub fn init() Self{
+            var self: Self = .{};
+            inline for(std.meta.fieldNames(@TypeOf(self.storage))) |field| {
+                @field(self.storage, field) = null;
+            }
+            return self;
+        }
+        
+        pub fn getOrCreatePool(self: *Self, comptime pool: pool_name) *getPoolFromName(pool) {
+            inline for(std.meta.fieldNames(@TypeOf(self.storage))) |field| {
+                if(@field(self.storage, field)) |pool_ptr|{
+                    return pool_ptr;
+                }
+            }
+
+            //TODO CREATE HEAP HERE 
+        }
+    };
+}
 
 

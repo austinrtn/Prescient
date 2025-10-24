@@ -4,7 +4,6 @@ const std = @import("std");
 // Re-export ECS modules for testing
 test {
     _ = @import("ecs/ComponentRegistry.zig");
-    _ = @import("ecs/Archetype.zig");
     _ = @import("ecs/ArchetypePool.zig");
 }
 
