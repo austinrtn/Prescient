@@ -44,25 +44,47 @@ pub fn PoolManager() type {
     return struct {
         const Self = @This();
         storage: pool_storage = undefined, 
+        allocator: std.mem.Allocator,
 
-        pub fn init() Self{
-            var self: Self = .{};
+        pub fn init(allocator: std.mem.Allocator) Self{
+            var self: Self = .{.allocator = allocator};
             inline for(std.meta.fieldNames(@TypeOf(self.storage))) |field| {
                 @field(self.storage, field) = null;
             }
             return self;
         }
         
-        pub fn getOrCreatePool(self: *Self, comptime pool: pool_name) *getPoolFromName(pool) {
+        pub fn getOrCreatePool(self: *Self, comptime pool: pool_name) !*getPoolFromName(pool) {
+            //Get names of each field for the pool storage
             inline for(std.meta.fieldNames(@TypeOf(self.storage))) |field| {
+                //Check if pool name matches field
+                if(!std.mem.eql(u8, field, @tagName(pool))) continue;
+
                 if(@field(self.storage, field)) |pool_ptr|{
                     return pool_ptr;
+                } 
+                else {
+                    const ptr = try self.allocator.create(getPoolFromName(pool));
+                    ptr.* = getPoolFromName(pool).init(self.allocator);
+                    return &ptr;
                 }
             }
+        }
 
-            //TODO CREATE HEAP HERE 
+        pub fn deinit(self: *Self) void {
+            inline for(std.meta.fieldNames(@TypeOf(self.storage))) |field| {
+                const pool = &@field(self.storage, field);
+                pool.*.deinit();
+                self.allocator.destroy(pool);
+            }
         }
     };
 }
 
+test "createPool" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = gpa.allocator();
+    defer _ = gpa.deinit();
 
+
+}
