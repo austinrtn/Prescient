@@ -149,7 +149,8 @@ pub fn ArchetypePool(comptime pool_components: []const CR.ComponentName, comptim
                     var result: T = undefined;
                     inline for(std.meta.fields(T)) |field| {
                         if(!@hasField(@TypeOf(data), field.name)) {
-                            @compileError("Field " ++ field.name ++ " is missing from component " ++ @tagName(component) ++ "!\nMake sure fields of all components are included and spelled properly when using Pool.createEntity()\n");
+                            @compileError("Field " ++ field.name ++ " is missing from component " 
+                                ++ @tagName(component) ++ "!\nMake sure fields of all components are included and spelled properly when using Pool.createEntity()\n");
                         }
                         @field(result, field.name) = @field(data, field.name);
                     }
@@ -164,21 +165,43 @@ pub fn ArchetypePool(comptime pool_components: []const CR.ComponentName, comptim
                 };
         }
 
-        // pub fn remove_entity(self: *Self, archetype_index: u32, archetype_mask: CR.ComponentMask) Entity {
-        //     var archetype = try self.getOrCreateStorage(archetype_mask);
-        //     const swa
-        //     inline for(@typeInfo(storage_type).@"struct".fields) |field| {
-        //         if(!comptime std.mem.eql(u8, "entities", field.name)) {
-        //
-        //         }
-        //     }
-        // }
+        pub fn remove_entity(self: *Self, archetype_index: u32, entity_mask: CR.ComponentMask, entity_pool_mask: CR.ComponentMask) !Entity {
+            var archetype = self.getStorage(entity_mask) orelse return error.ArchetypeDoesNotExist;
+            try throwEntityPoolMismatch(entity_pool_mask);
+
+            const swapped_entity = archetype.entities.swapRemove(archetype_index);
+            inline for(@typeInfo(storage_type).@"struct".fields) |field| {
+                if(!comptime std.mem.eql(u8, "entities", field.name)) {
+                    // Get component bit at comptime
+                    const component_name = comptime std.meta.stringToEnum(CR.ComponentName, field.name).?;
+                    const field_bit = comptime MM.Comptime.componentToBit(component_name);
+
+                    // Only process if this component exists in the entity's mask
+                    if (MM.maskContains(entity_mask, field_bit)) {
+                        const component_array = &@field(archetype, field.name);
+                        if(component_array.* != null)  {
+                            if(optimize){
+                                var comp_array = &component_array.*.?;
+                                _ = comp_array.swapRemove(archetype_index);
+                            }
+                            else {
+                                var comp_array = component_array.*.?;
+                                _ = comp_array.swapRemove(archetype_index);
+                            }
+                        }
+                    }
+                }
+            }
+            return swapped_entity;
+        }
 
         fn moveEntity(
-            allocator: std.mem.Allocator, 
-            new_storage: *storage_type, 
-            old_storage: *storage_type, 
-            archetype_index: u32, 
+            allocator: std.mem.Allocator,
+            new_storage: *storage_type,
+            new_mask: CR.ComponentMask,
+            old_storage: *storage_type,
+            old_mask: CR.ComponentMask,
+            archetype_index: u32,
             direction: MoveDirection
             ) !struct { added_entity_index: u32, swapped_entity: ?Entity}{
             const entity_index = old_storage.entities.items[archetype_index];
@@ -191,25 +214,32 @@ pub fn ArchetypePool(comptime pool_components: []const CR.ComponentName, comptim
 
             inline for(@typeInfo(storage_type).@"struct".fields) |field| {
                 if(!comptime std.mem.eql(u8, "entities", field.name)) {
-                    const maybe_new = &@field(new_storage, field.name);
-                    const maybe_old = &@field(old_storage, field.name);
+                    // Get component bit at comptime
+                    const component_name = comptime std.meta.stringToEnum(CR.ComponentName, field.name).?;
+                    const field_bit = comptime MM.Comptime.componentToBit(component_name);
 
-                    // Component exists in old but not in new
-                    if(maybe_old.* != null and maybe_new.* == null) {
-                        if(direction == .adding) return error.ComponentLostDuringAdd; // This shouldn't happen when adding
-                        // For .removing, this is expected - just skip copying this component
-                    } else if(maybe_new.* != null and maybe_old.* != null) {
-                        // Component exists in both - copy it over
-                        if(optimize) {
-                            var new_array = &maybe_new.*.?;
-                            var old_array = &maybe_old.*.?;
-                            try new_array.append(allocator, old_array.items[archetype_index]);
-                            _ = old_array.swapRemove(archetype_index);
-                        } else {
-                            var new_array_ptr = maybe_new.*.?;
-                            var old_array_ptr = maybe_old.*.?;
-                            try new_array_ptr.append(allocator, old_array_ptr.items[archetype_index]);
-                            _ = old_array_ptr.swapRemove(archetype_index);
+                    // Skip if component doesn't exist in either mask
+                    if (MM.maskContains(new_mask, field_bit) or MM.maskContains(old_mask, field_bit)) {
+                        const maybe_new = &@field(new_storage, field.name);
+                        const maybe_old = &@field(old_storage, field.name);
+
+                        // Component exists in old but not in new
+                        if(maybe_old.* != null and maybe_new.* == null) {
+                            if(direction == .adding) return error.ComponentLostDuringAdd; // This shouldn't happen when adding
+                            // For .removing, this is expected - just skip copying this component
+                        } else if(maybe_new.* != null and maybe_old.* != null) {
+                            // Component exists in both - copy it over
+                            if(optimize) {
+                                var new_array = &maybe_new.*.?;
+                                var old_array = &maybe_old.*.?;
+                                try new_array.append(allocator, old_array.items[archetype_index]);
+                                _ = old_array.swapRemove(archetype_index);
+                            } else {
+                                var new_array_ptr = maybe_new.*.?;
+                                var old_array_ptr = maybe_old.*.?;
+                                try new_array_ptr.append(allocator, old_array_ptr.items[archetype_index]);
+                                _ = old_array_ptr.swapRemove(archetype_index);
+                            }
                         }
                     }
                 }
@@ -221,17 +251,25 @@ pub fn ArchetypePool(comptime pool_components: []const CR.ComponentName, comptim
             };
         }
 
-
-        pub fn getOrCreateStorage(self: *Self, mask: CR.ComponentMask) !*storage_type {
+        fn getStorage(self: *Self, mask: CR.ComponentMask) ?*storage_type {
             for(self.mask_list.items, 0..) |existing_mask, i| {
                 if(existing_mask == mask) {
                     return &self.storage_list.items[i];
                 }
             }
-            const storage = try initStorage(self.allocator, mask);
-            try self.storage_list.append(self.allocator, storage);
-            try self.mask_list.append(self.allocator, mask);
-            return &self.storage_list.items[self.storage_list.items.len - 1];
+            return null;
+        }
+
+        fn getOrCreateStorage(self: *Self, mask: CR.ComponentMask) !*storage_type {
+            if(self.getStorage(mask)) |storage| {
+                return storage;
+            }
+            else {
+                const storage = try initStorage(self.allocator, mask);
+                try self.storage_list.append(self.allocator, storage);
+                try self.mask_list.append(self.allocator, mask);
+                return &self.storage_list.items[self.storage_list.items.len - 1];
+            }
         }
 
         pub fn deinit(self: *Self) void {
@@ -282,10 +320,7 @@ pub fn ArchetypePool(comptime pool_components: []const CR.ComponentName, comptim
                 }
             }
 
-            if(entity_pool_mask != pool_mask) {
-                std.debug.print("\nEntity assigned pool does not match pool: {s}\n", .{@typeName(Self)});
-                return error.EntityPoolMismatch;
-            }
+            try throwEntityPoolMismatch(entity_pool_mask);
 
             const new_mask = MM.Runtime.addComponent(entity_mask, component);
 
@@ -297,7 +332,7 @@ pub fn ArchetypePool(comptime pool_components: []const CR.ComponentName, comptim
             const old_storage = try self.getOrCreateStorage(entity_mask);
             const new_storage = try self.getOrCreateStorage(new_mask);
 
-            const result = try moveEntity(self.allocator, new_storage, old_storage, archetype_index, .adding);
+            const result = try moveEntity(self.allocator, new_storage, new_mask, old_storage, entity_mask, archetype_index, .adding);
             _ = try setStorageComponent(self.allocator, new_storage, component, data); // Add the new component data
            return .{
                 .added_entity_index = result.added_entity_index,
@@ -306,6 +341,16 @@ pub fn ArchetypePool(comptime pool_components: []const CR.ComponentName, comptim
            };
         }
 
+        fn checkIfEntInPool(entity_pool_mask: CR.ComponentMask) bool {
+            return entity_pool_mask == pool_mask;
+        }
+
+        fn throwEntityPoolMismatch(entity_pool_mask: CR.ComponentMask) !void {
+            if(!checkIfEntInPool(entity_pool_mask)){
+                std.debug.print("\nEntity assigned pool does not match pool: {s}\n", .{@typeName(Self)});
+                return error.EntityPoolMismatch;
+            }
+        }
 
         fn validateComponents(comptime components: []const CR.ComponentName) void {
             for(components) |component|{
