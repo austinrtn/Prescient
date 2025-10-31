@@ -2,7 +2,7 @@
 //!
 //! Utilities for creating and manipulating component bitmasks.
 //! Provides both compile-time and runtime operations.
-
+const std = @import("std");
 const CR = @import("ComponentRegistry.zig");
 
 /// Check if a mask contains all required components.

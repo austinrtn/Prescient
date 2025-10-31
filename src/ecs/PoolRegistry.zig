@@ -1,6 +1,7 @@
 const std = @import("std");
 const cr = @import("ComponentRegistry.zig");
 const ArchPool = @import("ArchetypePool.zig");
+const em = @import("EntityManager.zig");
 
 pub const MovementPool = ArchPool.ArchetypePool(&.{.Position, .Velocity}, true);
 
@@ -17,7 +18,7 @@ pub fn getPoolFromName(comptime pool: pool_name) type {
 }
 
 pub fn PoolManager() type {
-    const pool_storage = blk: {
+    const pool_storage_type = blk: {
         var fields: [pool_types.len]std.builtin.Type.StructField = undefined;
        
         for(pool_types, 0..) |pool, i| {
@@ -43,48 +44,68 @@ pub fn PoolManager() type {
 
     return struct {
         const Self = @This();
-        storage: pool_storage = undefined, 
+
+        storage: pool_storage_type, 
         allocator: std.mem.Allocator,
 
         pub fn init(allocator: std.mem.Allocator) Self{
-            var self: Self = .{.allocator = allocator};
-            inline for(std.meta.fieldNames(@TypeOf(self.storage))) |field| {
-                @field(self.storage, field) = null;
-            }
-            return self;
+            const storage = blk: {
+                var result: pool_storage_type = undefined;
+                inline for(std.meta.fields(pool_storage_type)) |field_info| {
+                    @field(result, field_info.name) = null;
+                }
+                break :blk result;
+            };
+            return .{.allocator = allocator, .storage = storage};
         }
         
         pub fn getOrCreatePool(self: *Self, comptime pool: pool_name) !*getPoolFromName(pool) {
             //Get names of each field for the pool storage
-            inline for(std.meta.fieldNames(@TypeOf(self.storage))) |field| {
+            inline for(std.meta.fields(@TypeOf(self.storage))) |field| {
                 //Check if pool name matches field
-                if(!std.mem.eql(u8, field, @tagName(pool))) continue;
-
-                if(@field(self.storage, field)) |pool_ptr|{
-                    return pool_ptr;
-                } 
-                else {
-                    const ptr = try self.allocator.create(getPoolFromName(pool));
-                    ptr.* = getPoolFromName(pool).init(self.allocator);
-                    return &ptr;
+                if(std.mem.eql(u8, field.name, @tagName(pool))) {
+                    if(@field(self.storage, field.name)) |*pool_ptr|{
+                        return pool_ptr.*;
+                    } 
+                    else {
+                        const ptr = try self.allocator.create(getPoolFromName(pool));
+                        ptr.* = try getPoolFromName(pool).init(self.allocator);
+                        @field(self.storage, field.name) = ptr;
+                        return ptr;
+                    }
                 }
             }
+            unreachable;
         }
 
         pub fn deinit(self: *Self) void {
-            inline for(std.meta.fieldNames(@TypeOf(self.storage))) |field| {
-                const pool = &@field(self.storage, field);
-                pool.*.deinit();
-                self.allocator.destroy(pool);
+            inline for(std.meta.fields(@TypeOf(self.storage))) |field| {
+                const pool = &@field(self.storage, field.name);
+                if(pool.*) |result| {
+                    result.*.deinit();
+                    self.allocator.destroy(result);
+                }
             }
         }
     };
 }
 
-test "createPool" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = gpa.allocator();
-    defer _ = gpa.deinit();
-
-
-}
+// test "createPool" {
+//     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+//     const allocator = gpa.allocator();
+//     defer _ = gpa.deinit();
+//
+//     var pool_manager = PoolManager().init(allocator);
+//     defer pool_manager.deinit();
+//     const movement = try pool_manager.getOrCreatePool(.MovementPool);
+//
+//     //const Position = cr.getTypeByName(.Position);
+//     const Velocity = cr.getTypeByName(.Velocity);
+//
+//     const ent = try movement.createEntity(.{
+//         .Position = .{ .x = 5.0, .y = 3.0 },
+//         .Velocity = Velocity{ .dx = 2.0, .dy = 4.0 },
+//     });
+//     _ = ent;
+//     //_ = movement;
+// }
