@@ -11,12 +11,22 @@
 const std = @import("std");
 const Position = @import("../components/Position.zig").Position;
 const Velocity = @import("../components/Velocity.zig").Velocity;
+const Attack = @import("../components/Attack.zig").Attack;
 
 /// Enum of all registered component types.
 /// Add new components here and to ComponentTypes array.
 pub const ComponentName = enum {
     Position,
     Velocity,
+    Attack,
+};
+
+/// Array mapping ComponentName enum values to their actual types.
+/// Must be kept in sync with ComponentName enum order.
+pub const ComponentTypes = [_]type {
+    Position,
+    Velocity,
+    Attack,
 };
 
 /// Component bitmask type that automatically scales based on component count.
@@ -35,13 +45,6 @@ pub const ComponentMask = blk: {
     } else {
         @compileError("Component count exceeds 128. Consider using a DynamicBitSet or redesigning component architecture.");
     }
-};
-
-/// Array mapping ComponentName enum values to their actual types.
-/// Must be kept in sync with ComponentName enum order.
-pub const ComponentTypes = [_]type {
-    Position,
-    Velocity,
 };
 
 /// Convert a ComponentName to its corresponding type at compile time.
@@ -137,7 +140,7 @@ test "ComponentRegistry component IDs" {
 
 test "ComponentRegistry runtime metadata lookup" {
     // Verify the runtime metadata table was generated correctly
-    try std.testing.expectEqual(2, ComponentRegistry.runtime_meta_table.len);
+    try std.testing.expectEqual(3, ComponentRegistry.runtime_meta_table.len);
 
     // Test runtime lookup
     const pos_id = @intFromEnum(ComponentName.Position);

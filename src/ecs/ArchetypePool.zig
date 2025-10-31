@@ -54,12 +54,12 @@ pub fn ArchetypePool(comptime pool_components: []const CR.ComponentName, comptim
         break :blk set;
     };
 
-    const pool_id = comptime MM.Comptime.createMask(pool_components);
+    const POOL_MASK = comptime MM.Comptime.createMask(pool_components);
 
     return struct {
         const Self = @This();
         const pool_name = std.meta.stringToEnum(PR.pool_name, @typeName(@TypeOf(Self))) orelse @compileError("Pool not registred");
-        const id = pool_id;
+        pub const pool_mask = POOL_MASK;
         pub const COMPONENTS = pool_components;
 
         const MoveDirection = enum {
@@ -105,11 +105,6 @@ pub fn ArchetypePool(comptime pool_components: []const CR.ComponentName, comptim
                 }
             }
             return storage;
-        }
-
-        pub fn getPoolMask(self: *Self) CR.ComponentMask {
-            _ = self;
-            return id;
         }
 
         fn setStorageComponent(allocator: std.mem.Allocator, storage: *storage_type, comptime component: CR.ComponentName, data: CR.getTypeByName(component)) !void{
@@ -169,17 +164,30 @@ pub fn ArchetypePool(comptime pool_components: []const CR.ComponentName, comptim
                 };
         }
 
+        // pub fn remove_entity(self: *Self, archetype_index: u32, archetype_mask: CR.ComponentMask) Entity {
+        //     var archetype = try self.getOrCreateStorage(archetype_mask);
+        //     const swa
+        //     inline for(@typeInfo(storage_type).@"struct".fields) |field| {
+        //         if(!comptime std.mem.eql(u8, "entities", field.name)) {
+        //
+        //         }
+        //     }
+        // }
+
         fn moveEntity(
             allocator: std.mem.Allocator, 
             new_storage: *storage_type, 
             old_storage: *storage_type, 
             archetype_index: u32, 
             direction: MoveDirection
-            ) !struct { added_entity_index: u32, swaped_entity: Entity}{
+            ) !struct { added_entity_index: u32, swapped_entity: ?Entity}{
             const entity_index = old_storage.entities.items[archetype_index];
             try new_storage.entities.append(allocator, entity_index);
+
+            const last_index = old_storage.entities.items.len - 1;
+            const swapped = archetype_index != last_index;
+            const swapped_entity = if(swapped) old_storage.entities.items[last_index] else null;
             const added_entity_index: u32 = @intCast(new_storage.entities.items.len - 1);
-            const swaped_entity = old_storage.entities.swapRemove(archetype_index);
 
             inline for(@typeInfo(storage_type).@"struct".fields) |field| {
                 if(!comptime std.mem.eql(u8, "entities", field.name)) {
@@ -209,7 +217,7 @@ pub fn ArchetypePool(comptime pool_components: []const CR.ComponentName, comptim
             }
             return .{
                 .added_entity_index = added_entity_index,
-                .swaped_entity = swaped_entity,
+                .swapped_entity = swapped_entity,
             };
         }
 
@@ -238,7 +246,7 @@ pub fn ArchetypePool(comptime pool_components: []const CR.ComponentName, comptim
                         // Get pointer to the field to avoid copying
                         const field_ptr = &@field(storage.*, field.name);
                         if (field_ptr.*) |*array| {
-                            array.deinit(self.allocator);
+                           array.deinit(self.allocator);
                         }
                     } else {
                         // Non-optimized: field is ?*ArrayList(T)
@@ -256,26 +264,45 @@ pub fn ArchetypePool(comptime pool_components: []const CR.ComponentName, comptim
         pub fn addComponent(
             self: *Self,
             entity_mask: CR.ComponentMask,
+            entity_pool_mask: CR.ComponentMask,
             archetype_index: u32,
             comptime component: CR.ComponentName,
             data: CR.getTypeByName(component)
-        ) !struct { added_entity_index: u32, added_entity_mask: CR.ComponentMask, swaped_entity: Entity}{
+        ) !struct { added_entity_index: u32, added_entity_mask: CR.ComponentMask, swapped_entity: ?Entity}{
+            comptime {
+                var found = false;
+                for (pool_components) |comp| {
+                    if (comp == component) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    @compileError("Component: " ++ @tagName(component) ++ " does not exist in pool: " ++ @typeName(Self));
+                }
+            }
+
+            if(entity_pool_mask != pool_mask) {
+                std.debug.print("\nEntity assigned pool does not match pool: {s}\n", .{@typeName(Self)});
+                return error.EntityPoolMismatch;
+            }
+
             const new_mask = MM.Runtime.addComponent(entity_mask, component);
 
-            // Ensure both storages exist before getting pointers to avoid invalidation
-            _ = try self.getOrCreateStorage(entity_mask);
-            _ = try self.getOrCreateStorage(new_mask);
+            // Ensures array lists do not reallocate and invalidate pointers durring function
+            try self.mask_list.ensureUnusedCapacity(self.allocator, 2);
+            try self.mask_list.ensureUnusedCapacity(self.allocator, 2);
 
             // Now safely get pointers after all allocations are done
             const old_storage = try self.getOrCreateStorage(entity_mask);
             const new_storage = try self.getOrCreateStorage(new_mask);
 
-            const moved_ent_data = try moveEntity(self.allocator, new_storage, old_storage, archetype_index, .adding);
+            const result = try moveEntity(self.allocator, new_storage, old_storage, archetype_index, .adding);
             _ = try setStorageComponent(self.allocator, new_storage, component, data); // Add the new component data
            return .{
-                .added_entity_index = moved_ent_data.added_entity_index,
+                .added_entity_index = result.added_entity_index,
                 .added_entity_mask = new_mask,
-                .swaped_entity = moved_ent_data.swaped_entity,
+                .swapped_entity = result.swapped_entity,
            };
         }
 

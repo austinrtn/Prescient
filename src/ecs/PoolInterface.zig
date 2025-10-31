@@ -20,10 +20,12 @@ pub fn PoolInterface(comptime components: []const CR.ComponentName, comptime opt
         }
 
         pub fn createEntity(self: *Self, comptime component_data: anytype) !EM.Entity {
-            var entity_slot = try self.enitity_manager.getNewSlot(undefined, self.pool.getPoolMask(), undefined);
+            const pool_mask = @TypeOf(self.pool.*).pool_mask;
+            var entity_slot = try self.enitity_manager.getNewSlot(undefined, pool_mask, undefined);
             const result = try self.pool.addEntity(entity_slot.getEntity(), component_data);
             entity_slot.storage_index = result.index;
             entity_slot.mask = result.mask;
+            entity_slot.pool_mask = pool_mask;
             return entity_slot.getEntity();
         }
 
@@ -33,16 +35,14 @@ pub fn PoolInterface(comptime components: []const CR.ComponentName, comptime opt
 
         pub fn addComponent(self: *Self, entity: EM.Entity, comptime component: CR.ComponentName, data: CR.getTypeByName(component)) !void {
             var entity_slot = try self.enitity_manager.getSlot(entity);
-            const result = try self.pool.addComponent(entity_slot.mask, entity_slot.storage_index, component, data);
+            const result = try self.pool.addComponent(entity_slot.mask, entity_slot.pool_mask, entity_slot.storage_index, component, data);
             const old_storage_index = entity_slot.storage_index;
             entity_slot.mask = result.added_entity_mask;
             entity_slot.storage_index = result.added_entity_index;
 
-            std.debug.print("\nEnt Swapped:{} \n", .{result.swaped_entity});
-
-            if(!std.meta.eql(result.swaped_entity, entity)) {
-                const swaped_slot = try self.enitity_manager.getSlot(result.swaped_entity);
-                swaped_slot.storage_index = old_storage_index;
+            if(result.swapped_entity) |swapped_ent|{
+                const swapped_slot = try self.enitity_manager.getSlot(swapped_ent);
+                swapped_slot.storage_index = old_storage_index;
             }
         }
 
@@ -53,36 +53,90 @@ pub fn PoolInterface(comptime components: []const CR.ComponentName, comptime opt
 }
 
 test "create entity" {
-    var entity_maanger = try EM.EntityManager.init(testing.allocator);
+    var entity_manager = try EM.EntityManager.init(testing.allocator);
     const MovementPool = AP.ArchetypePool(&.{.Position, .Velocity}, false);
     var movement_pool = try MovementPool.init(testing.allocator);
 
     defer {
-        entity_maanger.deinit();
+        entity_manager.deinit();
         movement_pool.deinit();
     }
 
-    var interface = PoolInterface(MovementPool.COMPONENTS, false).init(&movement_pool, &entity_maanger);
+    var interface = PoolInterface(MovementPool.COMPONENTS, false).init(&movement_pool, &entity_manager);
 
     const entity1 = try interface.createEntity(.{
         .Position = .{.x = 3, .y = 4}
     });
 
-    std.debug.print("\nEnt1: {}", .{entity1});
 
     const entity2 = try interface.createEntity(.{
         .Position = .{.x = 1, .y = 0},
     });
 
-    std.debug.print("\nEnt2: {}", .{entity2});
+    // Before adding component, verify entity1 has only Position
+    const slot1_before = try interface.enitity_manager.getSlot(entity1);
+    const slot2_before = try interface.enitity_manager.getSlot(entity2);
 
-    try interface.addComponent( 
+    try testing.expect(slot1_before.storage_index == 0);
+    try testing.expect(slot2_before.storage_index == 1);
+    // Note: Both entities are in the same pool (pool_mask=3), but entity1 only has Position
+    // so its mask should be 1, while entity2 also only has Position so mask should be 1
+
+    try interface.addComponent(
         entity1,
         .Velocity,
         .{.dx = 1, .dy = 2},
     );
-    
-    std.debug.print("\nAdding componet to ent2", .{});
-    std.debug.print("\nEnt1: {}", .{try interface.enitity_manager.getSlot(entity1)});
-    std.debug.print("\nEnt2: {}", .{try interface.enitity_manager.getSlot(entity2)});
+
+
+    // After adding component, verify entity1 now has both Position and Velocity
+    const slot1_after = try interface.enitity_manager.getSlot(entity1);
+    const slot2_after = try interface.enitity_manager.getSlot(entity2);
+
+    // Verify that entity1 now has both Position and Velocity components
+    try testing.expect(slot1_after.mask == 3); // Position (bit 0) + Velocity (bit 1) = 3
+
+    // Verify entity2 still only has Position component
+    try testing.expect(slot2_after.mask == 1); // Only Position component
+    try testing.expect(slot2_after.mask == slot2_before.mask); // Entity2's mask unchanged
+
+    // Verify that entity1 and entity2 now have different masks
+    try testing.expect(slot1_after.mask != slot2_after.mask);
+
+    // Verify that entity2's storage_index was updated after entity1 was moved via swap-remove
+    try testing.expect(slot2_after.storage_index == 0);
+
+    // Verify entity1 has new storage index after being moved to new archetype
+    try testing.expect(slot1_after.storage_index == 0);
+}
+
+test "catch pool mismatch bug" {
+    var entity_manager = try EM.EntityManager.init(testing.allocator);
+    const MovementPool = AP.ArchetypePool(&.{.Position, .Velocity}, false);
+    const AllPool = AP.ArchetypePool(&.{.Position, .Velocity, .Attack}, false);
+    var movement_pool = try MovementPool.init(testing.allocator);
+    var all_pool = try AllPool.init(testing.allocator);
+
+    defer {
+        entity_manager.deinit();
+        movement_pool.deinit();
+        all_pool.deinit();
+    }
+
+    var movement_interface = PoolInterface(MovementPool.COMPONENTS, false).init(&movement_pool, &entity_manager);
+    var all_interface = PoolInterface(AllPool.COMPONENTS, false).init(&all_pool, &entity_manager);
+
+    const move_ent = try movement_interface.createEntity(.{
+        .Position = .{.x = 3, .y = 2},
+        .Velocity = .{.dx = 1, .dy = 1},
+    });
+
+    const all_ent = try all_interface.createEntity(.{
+        .Position = .{.x = 1, .y = 9},
+        .Velocity = .{.dx = 0, .dy = 0},
+        .Attack = .{.damage = 20.0, .crit_chance = 50},
+    });
+    _ = all_ent;
+
+    try testing.expectError(error.EntityPoolMismatch, all_interface.addComponent(move_ent, .Attack, .{.damage = 5, .crit_chance = 12}));
 }
