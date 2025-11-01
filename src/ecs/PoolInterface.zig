@@ -22,10 +22,12 @@ pub fn PoolInterface(comptime components: []const CR.ComponentName, comptime opt
         pub fn createEntity(self: *Self, comptime component_data: anytype) !EM.Entity {
             const pool_mask = @TypeOf(self.pool.*).pool_mask;
             var entity_slot = try self.entity_manager.getNewSlot(undefined, pool_mask, undefined);
+
             const result = try self.pool.addEntity(entity_slot.getEntity(), component_data);
             entity_slot.storage_index = result.index;
             entity_slot.mask = result.mask;
             entity_slot.pool_mask = pool_mask;
+
             return entity_slot.getEntity();
         }
 
@@ -33,7 +35,7 @@ pub fn PoolInterface(comptime components: []const CR.ComponentName, comptime opt
             const entity_slot = try self.entity_manager.getSlot(entity);
             const swapped_entity = try self.pool.remove_entity(entity_slot.storage_index, entity_slot.mask, entity_slot.pool_mask);
             
-            if(std.meta.eql(entity_slot.getEntity(), swapped_entity)) {
+            if(!std.meta.eql(entity_slot.getEntity(), swapped_entity)) {
                 const swapped_slot = try self.entity_manager.getSlot(swapped_entity);
                 swapped_slot.storage_index = entity_slot.storage_index; 
             }
@@ -53,9 +55,11 @@ pub fn PoolInterface(comptime components: []const CR.ComponentName, comptime opt
             }
         }
 
-        // pub fn removeComponent(self: *Self, entity: EM.Entity, comptime component: CR.ComponentName) !void {
-        //
-        // }
+        pub fn removeComponent(self: *Self, entity: EM.Entity, comptime component: CR.ComponentName) !void {
+            _ = self;
+            _ = entity;
+            _ = component;
+        }
     };
 }
 
@@ -136,22 +140,24 @@ test "destroy Entity" {
         });
         entities[i] = entity;
     } 
-    var slots: [entities.len]*EM.EntitySlot = undefined;
-    for(entities, 0..) |ent, i| {
+
+    var slots: [entities.len]*EM.EntitySlot = undefined; for(entities, 0..) |ent, i| {
         const slot = try movement_interface.entity_manager.getSlot(ent);
         slots[i] = slot;
     }
 
-
     try movement_interface.destroyEntity(entities[1]);
-
-    std.debug.print("\n\n{any}\n\n", .{movement_interface.entity_manager.available_entities});
+    entities[1] = try movement_interface.createEntity(.{.Position = .{.x = 4, .y = 0},});
+    
+    try testing.expect(slots[0].storage_index == 0);
+    try testing.expect(slots[1].generation == 1);
+    try testing.expect(slots[1].storage_index == 2);
+    try testing.expect(slots[2].storage_index == 1);
 }
 
 test "catch pool mismatch bug" {
     var entity_manager = try EM.EntityManager.init(testing.allocator);
-    const MovementPool = AP.ArchetypePool(&.{.Position, .Velocity}, false);
-    const AllPool = AP.ArchetypePool(&.{.Position, .Velocity, .Attack}, false);
+    const MovementPool = AP.ArchetypePool(&.{.Position, .Velocity}, false); const AllPool = AP.ArchetypePool(&.{.Position, .Velocity, .Attack}, false);
     var movement_pool = try MovementPool.init(testing.allocator);
     var all_pool = try AllPool.init(testing.allocator);
 

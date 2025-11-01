@@ -46,14 +46,6 @@ fn ComponentArrayStorage(comptime pool_components: []const CR.ComponentName, com
 pub fn ArchetypePool(comptime pool_components: []const CR.ComponentName, comptime optimize: bool) type {
     const storage_type = ComponentArrayStorage(pool_components, optimize);
 
-    const component_set = blk: {
-        var set = std.EnumSet(CR.ComponentName).initEmpty();
-        for(pool_components) |component| {
-            set.insert(component);
-        }
-        break :blk set;
-    };
-
     const POOL_MASK = comptime MM.Comptime.createMask(pool_components);
 
     return struct {
@@ -118,6 +110,27 @@ pub fn ArchetypePool(comptime pool_components: []const CR.ComponentName, comptim
             }
         }
 
+        fn getStorage(self: *Self, mask: CR.ComponentMask) ?*storage_type {
+            for(self.mask_list.items, 0..) |existing_mask, i| {
+                if(existing_mask == mask) {
+                    return &self.storage_list.items[i];
+                }
+            }
+            return null;
+        }
+
+        fn getOrCreateStorage(self: *Self, mask: CR.ComponentMask) !*storage_type {
+            if(self.getStorage(mask)) |storage| {
+                return storage;
+            }
+            else {
+                const storage = try initStorage(self.allocator, mask);
+                try self.storage_list.append(self.allocator, storage);
+                try self.mask_list.append(self.allocator, mask);
+                return &self.storage_list.items[self.storage_list.items.len - 1];
+            }
+        }
+
         pub fn addEntity(self: *Self, entity: Entity, comptime component_data: anytype) !struct { index: u32, mask: CR.ComponentMask }{
             const components = comptime blk: {
                 const fields = std.meta.fieldNames(@TypeOf(component_data));
@@ -126,9 +139,7 @@ pub fn ArchetypePool(comptime pool_components: []const CR.ComponentName, comptim
                     const comp = std.meta.stringToEnum(CR.ComponentName, field) orelse {
                         @compileError("Component not found in registry");
                     };
-                    if (!component_set.contains(comp)) {
-                        @compileError("Component '" ++ field ++ "' not in this pool");
-                    }
+                    validateComponentInPool(comp);
                     component_enums[i] = comp;
                 }
                 break :blk component_enums;
@@ -166,10 +177,12 @@ pub fn ArchetypePool(comptime pool_components: []const CR.ComponentName, comptim
         }
 
         pub fn remove_entity(self: *Self, archetype_index: u32, entity_mask: CR.ComponentMask, entity_pool_mask: CR.ComponentMask) !Entity {
+            try validateEntityInPool(entity_pool_mask);
             var archetype = self.getStorage(entity_mask) orelse return error.ArchetypeDoesNotExist;
-            try throwEntityPoolMismatch(entity_pool_mask);
 
-            const swapped_entity = archetype.entities.swapRemove(archetype_index);
+            const swapped_entity = archetype.entities.items[archetype.entities.items.len - 1]; 
+            _ = archetype.entities.swapRemove(archetype_index);
+
             inline for(@typeInfo(storage_type).@"struct".fields) |field| {
                 if(!comptime std.mem.eql(u8, "entities", field.name)) {
                     // Get component bit at comptime
@@ -193,6 +206,40 @@ pub fn ArchetypePool(comptime pool_components: []const CR.ComponentName, comptim
                 }
             }
             return swapped_entity;
+        }
+
+        pub fn addComponent(
+            self: *Self,
+            entity_mask: CR.ComponentMask,
+            entity_pool_mask: CR.ComponentMask,
+            archetype_index: u32,
+            comptime component: CR.ComponentName,
+            data: CR.getTypeByName(component)
+        ) !struct { added_entity_index: u32, added_entity_mask: CR.ComponentMask, swapped_entity: ?Entity}{
+            // Compile-time validation: ensure component exists in this pool
+            validateComponentInPool(component);
+
+            // Runtime validation: ensure entity belongs to this pool
+            try validateEntityInPool(entity_pool_mask);
+
+            const new_mask = MM.Runtime.addComponent(entity_mask, component);
+
+            // Ensures array lists do not reallocate and invalidate pointers durring function
+            try self.mask_list.ensureUnusedCapacity(self.allocator, 2);
+            try self.mask_list.ensureUnusedCapacity(self.allocator, 2);
+
+            // Now safely get pointers after all allocations are done
+            const old_storage = try self.getOrCreateStorage(entity_mask);
+            const new_storage = try self.getOrCreateStorage(new_mask);
+
+            const result = try moveEntity(self.allocator, new_storage, new_mask, old_storage, entity_mask, archetype_index, .adding);
+            _ = try setStorageComponent(self.allocator, new_storage, component, data); // Add the new component data
+                                                                                       //
+           return .{
+                .added_entity_index = result.added_entity_index,
+                .added_entity_mask = new_mask,
+                .swapped_entity = result.swapped_entity,
+           };
         }
 
         fn moveEntity(
@@ -251,27 +298,6 @@ pub fn ArchetypePool(comptime pool_components: []const CR.ComponentName, comptim
             };
         }
 
-        fn getStorage(self: *Self, mask: CR.ComponentMask) ?*storage_type {
-            for(self.mask_list.items, 0..) |existing_mask, i| {
-                if(existing_mask == mask) {
-                    return &self.storage_list.items[i];
-                }
-            }
-            return null;
-        }
-
-        fn getOrCreateStorage(self: *Self, mask: CR.ComponentMask) !*storage_type {
-            if(self.getStorage(mask)) |storage| {
-                return storage;
-            }
-            else {
-                const storage = try initStorage(self.allocator, mask);
-                try self.storage_list.append(self.allocator, storage);
-                try self.mask_list.append(self.allocator, mask);
-                return &self.storage_list.items[self.storage_list.items.len - 1];
-            }
-        }
-
         pub fn deinit(self: *Self) void {
             // Clean up all storage
             for (self.storage_list.items) |*storage| {
@@ -299,14 +325,18 @@ pub fn ArchetypePool(comptime pool_components: []const CR.ComponentName, comptim
             self.mask_list.deinit(self.allocator);
         }
 
-        pub fn addComponent(
-            self: *Self,
-            entity_mask: CR.ComponentMask,
-            entity_pool_mask: CR.ComponentMask,
-            archetype_index: u32,
-            comptime component: CR.ComponentName,
-            data: CR.getTypeByName(component)
-        ) !struct { added_entity_index: u32, added_entity_mask: CR.ComponentMask, swapped_entity: ?Entity}{
+        fn checkIfEntInPool(entity_pool_mask: CR.ComponentMask) bool {
+            return entity_pool_mask == pool_mask;
+        }
+
+        fn validateEntityInPool(entity_pool_mask: CR.ComponentMask) !void {
+            if(!checkIfEntInPool(entity_pool_mask)){
+                std.debug.print("\nEntity assigned pool does not match pool: {s}\n", .{@typeName(Self)});
+                return error.EntityPoolMismatch;
+            }
+        }
+
+        fn validateComponentInPool(comptime component: CR.ComponentName) void {
             comptime {
                 var found = false;
                 for (pool_components) |comp| {
@@ -318,49 +348,6 @@ pub fn ArchetypePool(comptime pool_components: []const CR.ComponentName, comptim
                 if (!found) {
                     @compileError("Component: " ++ @tagName(component) ++ " does not exist in pool: " ++ @typeName(Self));
                 }
-            }
-
-            try throwEntityPoolMismatch(entity_pool_mask);
-
-            const new_mask = MM.Runtime.addComponent(entity_mask, component);
-
-            // Ensures array lists do not reallocate and invalidate pointers durring function
-            try self.mask_list.ensureUnusedCapacity(self.allocator, 2);
-            try self.mask_list.ensureUnusedCapacity(self.allocator, 2);
-
-            // Now safely get pointers after all allocations are done
-            const old_storage = try self.getOrCreateStorage(entity_mask);
-            const new_storage = try self.getOrCreateStorage(new_mask);
-
-            const result = try moveEntity(self.allocator, new_storage, new_mask, old_storage, entity_mask, archetype_index, .adding);
-            _ = try setStorageComponent(self.allocator, new_storage, component, data); // Add the new component data
-           return .{
-                .added_entity_index = result.added_entity_index,
-                .added_entity_mask = new_mask,
-                .swapped_entity = result.swapped_entity,
-           };
-        }
-
-        fn checkIfEntInPool(entity_pool_mask: CR.ComponentMask) bool {
-            return entity_pool_mask == pool_mask;
-        }
-
-        fn throwEntityPoolMismatch(entity_pool_mask: CR.ComponentMask) !void {
-            if(!checkIfEntInPool(entity_pool_mask)){
-                std.debug.print("\nEntity assigned pool does not match pool: {s}\n", .{@typeName(Self)});
-                return error.EntityPoolMismatch;
-            }
-        }
-
-        fn validateComponents(comptime components: []const CR.ComponentName) void {
-            for(components) |component|{
-                Self.validateComponent(component);
-            }
-        }
-
-        fn validateComponent(comptime component: CR.ComponentName) void {
-            if(!component_set.contains(component)) {
-                @compileError("Component '" ++ @tagName(component) ++ "'is not avaiable in this Archetype Pool.\nEither add component to pool, or remove component from entity.");
             }
         }
     };
