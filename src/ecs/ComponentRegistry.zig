@@ -9,9 +9,9 @@
 //! - Hash-based component identification using Murmur2_64
 
 const std = @import("std");
-const Position = @import("../components/Position.zig").Position;
-const Velocity = @import("../components/Velocity.zig").Velocity;
-const Attack = @import("../components/Attack.zig").Attack;
+pub const Position = @import("../components/Position.zig").Position;
+pub const Velocity = @import("../components/Velocity.zig").Velocity;
+pub const Attack = @import("../components/Attack.zig").Attack;
 
 /// Enum of all registered component types.
 /// Add new components here and to ComponentTypes array.

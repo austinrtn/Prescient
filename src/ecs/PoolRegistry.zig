@@ -3,7 +3,7 @@ const cr = @import("ComponentRegistry.zig");
 const ArchPool = @import("ArchetypePool.zig");
 const em = @import("EntityManager.zig");
 
-pub const MovementPool = ArchPool.ArchetypePool(&.{.Position, .Velocity}, true);
+pub const MovementPool = ArchPool.ArchetypePool(&.{.Position, .Velocity});
 
 pub const pool_name = enum(u32) {
     MovementPool,
