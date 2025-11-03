@@ -43,7 +43,8 @@ fn ComponentArrayStorage(comptime pool_components: []const CR.ComponentName) typ
     });
 }
 
-pub fn ArchetypePool(comptime pool_components: []const CR.ComponentName) type {
+pub fn ArchetypePool(comptime req: []const CR.ComponentName, comptime opt: []const CR.ComponentName) type {
+    const pool_components = req ++ opt;
     const archetype_type = ComponentArrayStorage(pool_components);
 
     const POOL_MASK = comptime MM.Comptime.createMask(pool_components);
@@ -341,6 +342,29 @@ pub fn ArchetypePool(comptime pool_components: []const CR.ComponentName) type {
         fn checkIfEntInPool(entity_pool_mask: CR.ComponentMask) bool {
             return entity_pool_mask == pool_mask;
         }
+
+        fn validateAllRequiredComponents(comptime components: []CR.ComponentName) void {
+            const components_to_validate = comptime blk: {
+                var comp_validations: [req.len]bool = undefined;
+                for(0..req.len) |i| {
+                    comp_validations[i] = false;
+                } 
+                break :blk comp_validations;
+            };
+
+            inline for(0..components_to_validate.len) |i| {
+                
+            }
+        }
+
+        fn validateRequiredComponent(comptime component: CR.ComponentName) bool {
+            inline for(req) |req_comp| {
+                if(req_comp == req) {
+                    return true;
+                }
+            }
+            return false;
+ }
 
         fn validateComponentInArchetype(archetype_mask: CR.ComponentMask, component: CR.ComponentName) !void {
             if(!MM.maskContains(archetype_mask, MM.Runtime.componentToBit(component))) {
