@@ -3,14 +3,17 @@ const cr = @import("ComponentRegistry.zig");
 const ArchPool = @import("ArchetypePool.zig");
 const em = @import("EntityManager.zig");
 
-pub const MovementPool = ArchPool.ArchetypePool(&.{.Position, .Velocity});
+pub const MovementPool = ArchPool.ArchetypePool(&.{}, &.{.Position, .Velocity});
+pub const EnemyPool = ArchPool.ArchetypePool(&.{}, &.{.Position, .Velocity, .Attack});
 
 pub const pool_name = enum(u32) {
     MovementPool,
+    EnemyPool,
 };
 
 pub const pool_types = [_]type{
     MovementPool,
+    EnemyPool,
 };
 
 pub fn getPoolFromName(comptime pool: pool_name) type {

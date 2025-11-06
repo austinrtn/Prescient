@@ -46,30 +46,35 @@ fn ComponentArrayStorage(comptime pool_components: []const CR.ComponentName) typ
 pub fn ArchetypePool(comptime req: []const CR.ComponentName, comptime opt: []const CR.ComponentName) type {
     const pool_components = req ++ opt;
     const archetype_type = ComponentArrayStorage(pool_components);
-
     const POOL_MASK = comptime MM.Comptime.createMask(pool_components);
 
     return struct {
         const Self = @This();
         const pool_name = std.meta.stringToEnum(PR.pool_name, @typeName(@TypeOf(Self))) orelse @compileError("Pool not registred");
+
         pub const pool_mask = POOL_MASK;
+        pub const REQ_MASK = MM.Comptime.createMask(req);
         pub const COMPONENTS = pool_components;
 
         const MoveDirection = enum {
             adding,
             removing,
         };
-
+        
+        pub var instance: ?*Self = null;
         allocator: std.mem.Allocator,
         archetype_list: ArrayList(archetype_type),
         mask_list: ArrayList(CR.ComponentMask),
 
         pub fn init(allocator: std.mem.Allocator) !Self {
-            return Self{
+            var self: Self = .{
                 .allocator = allocator,
                 .archetype_list = ArrayList(archetype_type){},
                 .mask_list = ArrayList(CR.ComponentMask){},
             };
+
+            instance = &self; 
+            return self;
         }
 
         fn initArchetype(allocator: std.mem.Allocator, mask: CR.ComponentMask) !archetype_type {
@@ -120,7 +125,6 @@ pub fn ArchetypePool(comptime req: []const CR.ComponentName, comptime opt: []con
                 return &self.archetype_list.items[self.archetype_list.items.len - 1];
             }
         }
-
         pub fn addEntity(self: *Self, entity: Entity, comptime component_data: anytype) !struct { index: u32, mask: CR.ComponentMask }{
             const components = comptime blk: {
                 const fields = std.meta.fieldNames(@TypeOf(component_data));
@@ -134,6 +138,10 @@ pub fn ArchetypePool(comptime req: []const CR.ComponentName, comptime opt: []con
                 }
                 break :blk component_enums;
             };
+
+            comptime {
+                if(req.len > 0) validateAllRequiredComponents(&components);
+            }
 
             const mask = comptime MM.Comptime.createMask(&components);
             const archetype = try self.getOrCreateArchetype(mask);
@@ -251,6 +259,14 @@ pub fn ArchetypePool(comptime req: []const CR.ComponentName, comptime opt: []con
             comptime component: CR.ComponentName,
         ) !struct { removed_entity_index: u32, removed_entity_mask: CR.ComponentMask, swapped_entity: ?Entity}{
             validateComponentInPool(component);
+            comptime {
+                for(req) |req_comp| {
+                    if(req_comp == component) {
+                        @compileError("You can not remove required component " ++ @tagName(component) ++ " from pool " ++ @typeName(Self));
+                    }
+                }
+            }
+
             try validateEntityInPool(entity_pool_mask);
 
             const new_mask = MM.Runtime.removeComponent(entity_mask, component);
@@ -343,28 +359,21 @@ pub fn ArchetypePool(comptime req: []const CR.ComponentName, comptime opt: []con
             return entity_pool_mask == pool_mask;
         }
 
-        fn validateAllRequiredComponents(comptime components: []CR.ComponentName) void {
-            const components_to_validate = comptime blk: {
-                var comp_validations: [req.len]bool = undefined;
-                for(0..req.len) |i| {
-                    comp_validations[i] = false;
-                } 
-                break :blk comp_validations;
-            };
-
-            inline for(0..components_to_validate.len) |i| {
-                
-            }
-        }
-
-        fn validateRequiredComponent(comptime component: CR.ComponentName) bool {
-            inline for(req) |req_comp| {
-                if(req_comp == req) {
-                    return true;
+        fn validateAllRequiredComponents(comptime components: []const CR.ComponentName) void {
+            inline for (req) |required_comp| {
+                var found = false;
+                inline for (components) |provided_comp| {
+                    if (required_comp == provided_comp) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    @compileError("Required component '" ++ @tagName(required_comp) ++
+                        "' is missing when creating entity in pool " ++ @typeName(Self));
                 }
             }
-            return false;
- }
+        }
 
         fn validateComponentInArchetype(archetype_mask: CR.ComponentMask, component: CR.ComponentName) !void {
             if(!MM.maskContains(archetype_mask, MM.Runtime.componentToBit(component))) {

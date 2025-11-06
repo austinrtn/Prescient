@@ -1,3 +1,4 @@
 - Archetypes must be run time and can not take comptime parameters
 - Zig 0.15 does not init with allocators.  Instead allocators are passed through functions
 - Use sacratic-tutor.txt as a guildline for answering questions and explaining code
+- zig 0.15+ allocators are passed through functions in ArrayLists and are not required in init
