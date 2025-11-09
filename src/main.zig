@@ -1,5 +1,6 @@
 const std = @import("std");
-const PrescientPrototype2 = @import("PrescientPrototype2");
+const query = @import("ecs/Query.zig");
+//const PrescientPrototype2 = @import("PrescientPrototype2");
 
 pub fn main() !void {
 

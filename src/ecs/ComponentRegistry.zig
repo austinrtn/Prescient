@@ -12,6 +12,10 @@ const std = @import("std");
 pub const Position = @import("../components/Position.zig").Position;
 pub const Velocity = @import("../components/Velocity.zig").Velocity;
 pub const Attack = @import("../components/Attack.zig").Attack;
+pub const Health = @import("../components/Health.zig").Health;
+pub const Sprite = @import("../components/Sprite.zig").Sprite;
+pub const AI = @import("../components/AI.zig").AI;
+pub const Player = @import("../components/Player.zig").Player;
 
 /// Enum of all registered component types.
 /// Add new components here and to ComponentTypes array.
@@ -19,6 +23,10 @@ pub const ComponentName = enum {
     Position,
     Velocity,
     Attack,
+    Health,
+    Sprite,
+    AI,
+    Player,
 };
 
 /// Array mapping ComponentName enum values to their actual types.
@@ -27,6 +35,10 @@ pub const ComponentTypes = [_]type {
     Position,
     Velocity,
     Attack,
+    Health,
+    Sprite,
+    AI,
+    Player,
 };
 
 /// Component bitmask type that automatically scales based on component count.
@@ -140,7 +152,7 @@ test "ComponentRegistry component IDs" {
 
 test "ComponentRegistry runtime metadata lookup" {
     // Verify the runtime metadata table was generated correctly
-    try std.testing.expectEqual(3, ComponentRegistry.runtime_meta_table.len);
+    try std.testing.expectEqual(7, ComponentRegistry.runtime_meta_table.len);
 
     // Test runtime lookup
     const pos_id = @intFromEnum(ComponentName.Position);
