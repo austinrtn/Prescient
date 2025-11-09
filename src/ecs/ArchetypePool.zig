@@ -122,6 +122,8 @@ pub fn ArchetypePool(comptime req: []const CR.ComponentName, comptime opt: []con
         pub const pool_mask = POOL_MASK;
         pub const REQ_MASK = MM.Comptime.createMask(req);
         pub const COMPONENTS = pool_components;
+        pub const REQ_COMPONENTS = req;
+        pub const OPT_COMPONENTS = opt;
 
         /// EntityBuilder type for creating entities in this pool
         /// Required components are non-optional fields

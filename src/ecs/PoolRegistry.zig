@@ -131,6 +131,13 @@ pub fn PoolManager() type {
                 }
             }
         } 
+
+        pub fn flushMigrationQueue(comptime req: []const cr.ComponentName, 
+                comptime opt: []const cr.ComponentName, 
+                comptime archetype_pool: ArchPool.ArchetypePool(req, opt)
+            ) !void {
+                             
+        }
     };
 }
 
