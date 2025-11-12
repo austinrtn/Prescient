@@ -2,6 +2,7 @@ const std = @import("std");
 const cr = @import("ComponentRegistry.zig");
 const ArchPool = @import("ArchetypePool.zig");
 const em = @import("EntityManager.zig");
+const mm = @import("MaskManager.zig");
 
 /// Basic movement pool for entities that can move
 /// Required: (none)
@@ -28,7 +29,7 @@ pub const RenderablePool = ArchPool.ArchetypePool(&.{.Position, .Sprite}, &.{.Ve
 /// Optional: AI
 pub const CombatPool = ArchPool.ArchetypePool(&.{.Health, .Attack}, &.{.AI});
 
-pub const pool_name = enum(u32) {
+pub const PoolName = enum(u32) {
     MovementPool,
     EnemyPool,
     PlayerPool,
@@ -44,7 +45,7 @@ pub const pool_types = [_]type{
     CombatPool,
 };
 
-pub fn getPoolFromName(comptime pool: pool_name) type {
+pub fn getPoolFromName(comptime pool: PoolName) type {
     return pool_types[@intFromEnum(pool)];
 }
 
@@ -53,7 +54,7 @@ pub fn PoolManager() type {
         var fields: [pool_types.len]std.builtin.Type.StructField = undefined;
        
         for(pool_types, 0..) |pool, i| {
-            const name = @tagName(@as(pool_name,@enumFromInt(i)));
+            const name = @tagName(@as(PoolName,@enumFromInt(i)));
             fields[i] = std.builtin.Type.StructField{
                 .name = name,
                 .type = ?*pool,
@@ -90,7 +91,7 @@ pub fn PoolManager() type {
             return .{.allocator = allocator, .storage = storage};
         }
         
-        pub fn getOrCreatePool(self: *Self, comptime pool: pool_name) !*getPoolFromName(pool) {
+        pub fn getOrCreatePool(self: *Self, comptime pool: PoolName) !*getPoolFromName(pool) {
             //Get names of each field for the pool storage
             const field_name = @tagName(pool);
             inline for(std.meta.fields(@TypeOf(self.storage))) |field| {
@@ -120,43 +121,62 @@ pub fn PoolManager() type {
             }
         }
 
-        pub fn flushAllPools(self: *Self) !void {
+        pub fn flushAllPools(self: *Self, entity_manager: *em.EntityManager) !void {
             inline for(0..pool_types.len) |i| {
-                const pool_enum:pool_name = @enumFromInt(i);
+                const pool_enum:PoolName = @enumFromInt(i);
                 const name = @tagName(pool_enum);
 
-                var storage_field = @field(self.storage, name);
+                const storage_field = @field(self.storage, name);
                 if(storage_field) |pool| {
-                    pool.f
+                    try Self.flushMigrationQueue(pool, entity_manager);
                 }
             }
         } 
 
-        pub fn flushMigrationQueue(comptime req: []const cr.ComponentName, 
-                comptime opt: []const cr.ComponentName, 
-                comptime archetype_pool: ArchPool.ArchetypePool(req, opt)
-            ) !void {
-                             
+        pub fn flushMigrationQueue(pool: anytype, entity_manager: *em.EntityManager) !void {
+            const flush_results = try pool.flushMigrationQueue();
+            defer pool.allocator.free(flush_results);
+
+            for(flush_results) |result| {
+                var slot = try entity_manager.getSlot(result.entity);
+                const storage_index_holder = slot.storage_index;
+
+                slot.mask = result.entity_mask;
+                slot.storage_index = result.archetype_index;
+
+                if(result.swapped_entity) |swapped_ent| {
+                    const swapped_slot = try entity_manager.getSlot(swapped_ent);
+                    swapped_slot.storage_index = storage_index_holder;
+                }
+            }
         }
     };
 }
 
-// test "createPool" {
-//     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-//     const allocator = gpa.allocator();
-//     defer _ = gpa.deinit();
-//
-//     var pool_manager = PoolManager().init(allocator);
-//     defer pool_manager.deinit();
-//     const movement = try pool_manager.getOrCreatePool(.MovementPool);
-//
-//     //const Position = cr.getTypeByName(.Position);
-//     const Velocity = cr.getTypeByName(.Velocity);
-//
-//     const ent = try movement.createEntity(.{
-//         .Position = .{ .x = 5.0, .y = 3.0 },
-//         .Velocity = Velocity{ .dx = 2.0, .dy = 4.0 },
-//     });
-//     _ = ent;
-//     //_ = movement;
-// }
+test "flushAllPools" {
+    const allocator = std.testing.allocator;
+
+    var entity_manager = try em.EntityManager.init(allocator);
+    var pool_manager = PoolManager().init(allocator);
+    const movement_pool = try pool_manager.getOrCreatePool(.MovementPool);
+    defer {
+        pool_manager.deinit();
+        entity_manager.deinit();
+    }
+
+    var iface = movement_pool.getInterface(&entity_manager);
+
+    // Create entity with Position
+    const entity = try iface.createEntity(.{ .Position = .{ .x = 10.0, .y = 20.0 } });
+    const slot_before = try entity_manager.getSlot(entity);
+    try std.testing.expect(!mm.maskContains(slot_before.mask, mm.Comptime.componentToBit(.Velocity)));
+
+    // Queue a migration to add Velocity
+    try iface.addComponent(entity, .Velocity, .{ .dx = 5.0, .dy = 10.0 });
+
+    // Flush all pools and verify entity was updated
+    try pool_manager.flushAllPools(&entity_manager);
+
+    const slot_after = try entity_manager.getSlot(entity);
+    try std.testing.expect(mm.maskContains(slot_after.mask, mm.Comptime.componentToBit(.Velocity)));
+}

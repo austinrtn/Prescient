@@ -145,6 +145,7 @@ pub fn Query(comptime components: []const CR.ComponentName) type {
         allocator: std.mem.Allocator,
         pool_manager: *PR.PoolManager(),
         pool_storage: QueryStorage = POOL_STORAGE,
+        cached_archetypes: ArrayList(CR.ComponentMask) = {},
 
         pub fn init(allocator: std.mem.Allocator, pool_manager: *PR.PoolManager()) Self {
             const self = Self{

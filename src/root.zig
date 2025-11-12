@@ -5,7 +5,7 @@ const std = @import("std");
 test {
     _ = @import("ecs/ArchetypePool.zig");
     //_ = @import("ecs/ComponentRegistry.zig");
-    //_ = @import("ecs/PoolRegistry.zig");
+    _ = @import("ecs/PoolRegistry.zig");
     //_ = @import("ecs/ArchetypePool.zig");
     _ = @import("ecs/PoolInterface.zig");
     // _ = @import("ecs/Query.zig");

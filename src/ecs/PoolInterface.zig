@@ -79,29 +79,14 @@ pub fn PoolInterface(comptime config: PoolConfig) type {
                 entity_slot.mask, 
                 entity_slot.pool_mask, 
                 entity_slot.storage_index, 
-                .adding, 
+                .removing, 
                 component, 
                 null,
             );
         }
 
         pub fn flushMigrationQueue(self: *Self) !void {
-            const flush_results = try self.pool.flushMigrationQueue();
-            defer self.pool.allocator.free(flush_results);
-
-            for(flush_results) |result| {
-                std.debug.print("\nEnt:{}\n", .{result.entity.index});
-                var slot = try self.entity_manager.getSlot(result.entity);
-                const storage_index_holder = slot.storage_index;
-
-                slot.mask = result.entity_mask;
-                slot.storage_index = result.archetype_index;
-
-                if(result.swapped_entity) |swapped_ent| {
-                    const swapped_slot = try self.entity_manager.getSlot(swapped_ent);
-                    swapped_slot.storage_index = storage_index_holder;
-                }
-            }
+            try PR.PoolManager().flushMigrationQueue(self.pool, self.entity_manager); 
         }
     };
 }

@@ -1,0 +1,187 @@
+<mxfile host="Electron" agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/28.2.8 Chrome/140.0.7339.249 Electron/38.6.0 Safari/537.36" version="28.2.8">
+  <diagram name="Page-1" id="yCO6mQYoQ4jcKA5sKxgm">
+    <mxGraphModel dx="1763" dy="1069" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-74" value="&lt;span style=&quot;font-size: 40px;&quot;&gt;&lt;b&gt;CACHE INVALIDATION&lt;/b&gt;&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;fillColor=#eeeeee;strokeColor=#36393d;" vertex="1" parent="1">
+          <mxGeometry x="80" y="1120" width="720" height="720" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-37" value="&lt;span style=&quot;font-size: 40px;&quot;&gt;REQ vs. OPT COPMPONENT QUERYING&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;fillColor=#f9f7ed;strokeColor=#36393d;" vertex="1" parent="1">
+          <mxGeometry x="80" y="720" width="720" height="360" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-4" value="&lt;font style=&quot;font-size: 40px;&quot;&gt;ARCHETYPE POOLS&lt;/font&gt;" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;fillColor=#eeeeee;strokeColor=#36393d;" vertex="1" parent="1">
+          <mxGeometry x="120" y="360" width="640" height="280" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-1" value="NPC POOL&lt;div&gt;(req=pos, state;&lt;/div&gt;&lt;div&gt;opt=vel, atk, health, AI)&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;fontSize=20;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="160" y="480" width="160" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-2" value="PARTICLE POOL&lt;div&gt;(req=pos, vel;&lt;/div&gt;&lt;div&gt;opt=size, color)&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;fontSize=20;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="360" y="480" width="160" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-3" value="UI POOL&lt;div&gt;(req=dimensions;&lt;/div&gt;&lt;div&gt;opt=style)&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;fontSize=20;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="560" y="480" width="160" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-9" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="Wh9nceN3CIoRa3L3FM3c-5" target="Wh9nceN3CIoRa3L3FM3c-8">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-5" value="MOVEMENT SYSTEM" style="whiteSpace=wrap;html=1;aspect=fixed;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="400" y="90" width="80" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="Wh9nceN3CIoRa3L3FM3c-8" target="Wh9nceN3CIoRa3L3FM3c-1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-13" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="Wh9nceN3CIoRa3L3FM3c-8" target="Wh9nceN3CIoRa3L3FM3c-2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-8" value="QUERY&amp;nbsp;&lt;div&gt;POS, VEL&lt;/div&gt;" style="whiteSpace=wrap;html=1;aspect=fixed;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="400" y="215" width="80" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-17" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="Wh9nceN3CIoRa3L3FM3c-15" target="Wh9nceN3CIoRa3L3FM3c-16">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-15" value="NPC BEHAVIOR SYSTEM" style="whiteSpace=wrap;html=1;aspect=fixed;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="120" y="90" width="80" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-18" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="Wh9nceN3CIoRa3L3FM3c-16" target="Wh9nceN3CIoRa3L3FM3c-1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-16" value="QUERY&amp;nbsp;&lt;div&gt;STATE&lt;/div&gt;" style="whiteSpace=wrap;html=1;aspect=fixed;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="115" y="210" width="90" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-19" value="&lt;b&gt;&lt;font style=&quot;font-size: 16px;&quot;&gt;INFO&lt;/font&gt;&lt;/b&gt;&lt;div&gt;&lt;b&gt;&lt;font style=&quot;font-size: 16px;&quot;&gt;&lt;br&gt;&lt;/font&gt;&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 16px;&quot;&gt;Queries map pools by building specialized structures.&amp;nbsp; Pools out side of the query scope are never considered or itterated over.&amp;nbsp; Queries cache the indecies of archetypes within the archs&#39; pools, not the actual storage.&amp;nbsp;&amp;nbsp;&lt;/font&gt;&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;align=left;" vertex="1" parent="1">
+          <mxGeometry x="560" y="80" width="200" height="240" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-20" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="Wh9nceN3CIoRa3L3FM3c-21" target="Wh9nceN3CIoRa3L3FM3c-22">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-21" value="NPC BEHAVIOR SYSTEM" style="whiteSpace=wrap;html=1;aspect=fixed;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="120" y="840" width="80" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-27" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="Wh9nceN3CIoRa3L3FM3c-22" target="Wh9nceN3CIoRa3L3FM3c-26">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-22" value="QUERY&amp;nbsp;&lt;div&gt;STATE&lt;/div&gt;" style="whiteSpace=wrap;html=1;aspect=fixed;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="120" y="960" width="80" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-26" value="Collect all archetypes of NPC pool" style="whiteSpace=wrap;html=1;aspect=fixed;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="240" y="960" width="80" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-28" value="Because all archetypes within NPC Pool are requried to have state component, we can gaurentee the query matches all archs" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="205" y="830" width="120" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-29" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="Wh9nceN3CIoRa3L3FM3c-30" target="Wh9nceN3CIoRa3L3FM3c-32">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-30" value="MOVEMENT&lt;div&gt;SYSTEM&lt;/div&gt;" style="whiteSpace=wrap;html=1;aspect=fixed;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="560" y="840" width="80" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-36" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="Wh9nceN3CIoRa3L3FM3c-32" target="Wh9nceN3CIoRa3L3FM3c-35">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-32" value="QUERY&amp;nbsp;&lt;div&gt;POS &amp;amp; VEL&lt;/div&gt;" style="whiteSpace=wrap;html=1;aspect=fixed;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="560" y="960" width="80" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-34" value="Because all archetypes within NPC Pool are requried to have state component, we can gaurentee the query matches&amp;nbsp;" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="645" y="830" width="120" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-35" value="All archs of particle pool cached, NPC pool archs quired/cached via bitwise check" style="whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="650" y="960" width="110" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-107" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="Wh9nceN3CIoRa3L3FM3c-39" target="Wh9nceN3CIoRa3L3FM3c-106">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-39" value="NPC BEHAVIOR SYSTEM" style="whiteSpace=wrap;html=1;aspect=fixed;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="120" y="1360" width="80" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-49" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="Wh9nceN3CIoRa3L3FM3c-46" target="Wh9nceN3CIoRa3L3FM3c-48">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-46" value="CHECK STATE:&lt;div&gt;if(ent.state == moving&lt;/div&gt;&lt;div&gt;and !ent.hasComp(vel))&lt;/div&gt;&lt;div&gt;pool.addComp(ent, vel);&amp;nbsp;&lt;/div&gt;" style="whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="372.5" y="1360" width="135" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-63" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="Wh9nceN3CIoRa3L3FM3c-48" target="Wh9nceN3CIoRa3L3FM3c-62">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-48" value="&lt;font style=&quot;font-size: 10px;&quot;&gt;(Within pool)&lt;/font&gt;&lt;div&gt;&lt;font style=&quot;font-size: 10px;&quot;&gt;All data required for archetype migration is organized and stored within &quot;Migration queue&quot;&lt;/font&gt;&lt;/div&gt;" style="whiteSpace=wrap;html=1;fillColor=#cce5ff;strokeColor=#36393d;" vertex="1" parent="1">
+          <mxGeometry x="520" y="1360" width="150" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-72" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="Wh9nceN3CIoRa3L3FM3c-59" target="Wh9nceN3CIoRa3L3FM3c-60">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-59" value="&lt;font&gt;-Get current archetype of entity via comp mask&lt;/font&gt;&lt;div&gt;&lt;font&gt;-Get new comp mask (current mask + vel) of ents components + new component (vel) via comp mask.&amp;nbsp;&amp;nbsp;&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font&gt;-Create new archetype if archetype has yet to be created.&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font&gt;-Cut component data of src archetype and paste it to the dest archetype&amp;nbsp;&lt;/font&gt;&lt;/div&gt;" style="whiteSpace=wrap;html=1;fillColor=#cce5ff;strokeColor=#36393d;" vertex="1" parent="1">
+          <mxGeometry x="240" y="1520" width="280" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-60" value="When a new arch is created, pool gets marked &quot;dirty,&quot; and new arch index is&amp;nbsp; added to &quot;new_archs&quot; ArrayList.&amp;nbsp; Similar when archs become empty via removeComp()" style="whiteSpace=wrap;html=1;fillColor=#cce5ff;strokeColor=#36393d;" vertex="1" parent="1">
+          <mxGeometry x="560" y="1520" width="200" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-62" value="SYSTEM END" style="whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="690" y="1360" width="70" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-71" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="Wh9nceN3CIoRa3L3FM3c-69" target="Wh9nceN3CIoRa3L3FM3c-59">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-69" value="&lt;div&gt;FLUSH MIGRATION QUEUE FOR EACH POOL&lt;/div&gt;" style="whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="120" y="1520" width="80" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-77" value="&lt;font style=&quot;font-size: 24px;&quot;&gt;START FRAME: 0&lt;/font&gt;" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="120" y="1210" width="205" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-78" value="&lt;font style=&quot;font-size: 24px;&quot;&gt;END FRAME: 0&lt;/font&gt;" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="120" y="1490" width="180" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-96" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="Wh9nceN3CIoRa3L3FM3c-89" target="Wh9nceN3CIoRa3L3FM3c-95">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-89" value="MOVEMENT SYSTEM" style="whiteSpace=wrap;html=1;aspect=fixed;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="120" y="1240" width="80" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-111" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="Wh9nceN3CIoRa3L3FM3c-95" target="Wh9nceN3CIoRa3L3FM3c-110">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-95" value="Pools not yet queried so we query / cached archetypes in relevant pools (let&#39;s assume no NPC&#39;s have Vel yet).&amp;nbsp; Every arch in ParticlePool get&#39;s cached every query, NPCS must be compared.&amp;nbsp; Query won&#39;t check for new archetypes into pool is marked dirty." style="whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="240" y="1240" width="320" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-98" value="&lt;div&gt;End System.&lt;/div&gt;" style="whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="710" y="1240" width="50" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-100" value="&lt;font style=&quot;font-size: 24px;&quot;&gt;START FRAME: 1&lt;/font&gt;" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="120" y="1690" width="205" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-101" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="Wh9nceN3CIoRa3L3FM3c-102" target="Wh9nceN3CIoRa3L3FM3c-104">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-102" value="MOVEMENT SYSTEM" style="whiteSpace=wrap;html=1;aspect=fixed;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="120" y="1720" width="80" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-117" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="Wh9nceN3CIoRa3L3FM3c-104" target="Wh9nceN3CIoRa3L3FM3c-116">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-104" value="NPC now marked dirty.&amp;nbsp; Query Npc Pool once again and cache all archetypes contianing VEL." style="whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="310" y="1720" width="160" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-108" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="Wh9nceN3CIoRa3L3FM3c-106" target="Wh9nceN3CIoRa3L3FM3c-46">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-106" value="&lt;span style=&quot;color: rgb(0, 0, 0); font-family: Helvetica; font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: 400; letter-spacing: normal; orphans: 2; text-align: center; text-indent: 0px; text-transform: none; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; white-space: normal; text-decoration-thickness: initial; text-decoration-style: initial; text-decoration-color: initial; float: none; display: inline !important;&quot;&gt;&lt;font style=&quot;font-size: 10px;&quot;&gt;Get all NPC archertypes / component data, same as in Movment system&lt;/font&gt;&lt;/span&gt;" style="whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="230" y="1360" width="120" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-112" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="Wh9nceN3CIoRa3L3FM3c-110" target="Wh9nceN3CIoRa3L3FM3c-98">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-110" value="System processes cached queries." style="whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="600" y="1240" width="70" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-114" value="&lt;div&gt;End System.&lt;/div&gt;" style="whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="710" y="1720" width="50" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-115" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="Wh9nceN3CIoRa3L3FM3c-116" target="Wh9nceN3CIoRa3L3FM3c-114">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Wh9nceN3CIoRa3L3FM3c-116" value="System processes cached queries." style="whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="560" y="1720" width="70" height="80" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
