@@ -5,68 +5,77 @@
 const std = @import("std");
 const CR = @import("ComponentRegistry.zig");
 
-/// Check if a mask contains all required components.
-/// Returns true if mask has all bits set that are in required_mask.
-pub fn maskContains(mask: CR.ComponentMask, required_mask: CR.ComponentMask) bool {
-    return (mask & required_mask) == required_mask;
+pub fn MaskManager(comptime COMPONENTS: []const CR.ComponentName) type {
+    const MaskType = comptime blk: {
+        const len = (COMPONENTS.len);
+
+        if(len <= 8) { break :blk u8; } 
+        else if(len <= 16) { break :blk u16; }
+        else if(len <= 32) { break :blk u32; }
+        else if(len <= 64) { break :blk u64; }
+        else if(len <= 128) { break :blk u128; }
+    };
+
+    return struct {
+        pub const Mask = MaskType;
+        const Self = @This();
+
+        pub fn maskContains(mask: Mask, required_mask: Mask) bool {
+            return (mask & required_mask) == required_mask;
+        }
+
+        pub const Comptime = struct {
+            pub fn createMask(comptime components: []CR.ComponentName) Mask {
+                var mask: Mask = 0;
+                inline for (components) |component| {
+                    mask |= Self.Comptime.componentToBit(component);
+                }
+                return mask;
+            }
+
+            pub fn componentToBit(comptime component: CR.ComponentName) Mask {
+                inline for(COMPONENTS, 0..) |comp, bit_pos| {
+                    if(comp == component) {
+                        return @as(Mask, 1) << @intCast(bit_pos);
+                    } 
+                }
+                @compileError("Component " ++ @tagName(component) ++ " does not exist in this MaskManager / Pool");
+            }
+
+            pub fn addComponent(mask: Mask, comptime component: CR.ComponentName) Mask {
+                return mask | Self.Comptime.componentToBit(component);
+            }
+
+            pub fn removeComponent(mask: Mask, comptime component: CR.ComponentName) Mask {
+                return mask & ~Self.Comptime.componentToBit(component);
+            }
+        };
+
+        pub const Runtime = struct {
+            pub fn createMask(components: []const CR.ComponentName) Mask {
+                var mask: Mask = 0;
+                for(components) |component| {
+                    mask |= Self.Runtime.componentToBit(component);
+                }
+                return mask;
+            }
+
+            pub fn componentToBit(component: CR.ComponentName) Mask {
+                inline for(COMPONENTS, 0..) |comp, bit_pos| {
+                    if(comp == component) {
+                        return @as(Mask, 1) << @intCast(bit_pos);
+                    }
+                } 
+                unreachable;
+            }
+
+            pub fn addComponent(mask: Mask, component: CR.ComponentName) Mask {
+                return mask | Self.Runtime.componentToBit(component);
+            }
+
+            pub fn removeComponent(mask: Mask, component: CR.ComponentName) Mask {
+                return mask & ~Self.Runtime.componentToBit(component);
+            }
+        };
+    };
 }
-
-/// Compile-time mask operations
-pub const Comptime = struct {
-    /// Create a bitmask from multiple components.
-    /// ORs together all component bits into a single mask.
-    pub fn createMask(comptime components: []const CR.ComponentName) CR.ComponentMask {
-        var mask: CR.ComponentMask = 0;
-        inline for (components) |comp| {
-            mask |= componentToBit(comp);
-        }
-        return mask;
-    }
-
-    /// Convert a single component to its bitmask representation.
-    /// Each component gets a unique bit position based on its enum value.
-    pub fn componentToBit(comptime component: CR.ComponentName) CR.ComponentMask {
-        const bit_position = @intFromEnum(component);
-        return @as(CR.ComponentMask, 1) << @intCast(bit_position);
-    }
-
-    /// Add a component to an existing mask
-    pub fn addComponent(mask: CR.ComponentMask, comptime component: CR.ComponentName) CR.ComponentMask {
-        return mask | componentToBit(component);
-    }
-
-    /// Remove a component from an existing mask
-    pub fn removeComponent(mask: CR.ComponentMask, comptime component: CR.ComponentName) CR.ComponentMask {
-        return mask & ~componentToBit(component);
-    }
-};
-
-/// Runtime mask operations
-pub const Runtime = struct {
-    /// Create a bitmask from multiple components at runtime.
-    /// ORs together all component bits into a single mask.
-    pub fn createMask(components: []const CR.ComponentName) CR.ComponentMask {
-        var mask: CR.ComponentMask = 0;
-        for (components) |comp| {
-            mask |= componentToBit(comp);
-        }
-        return mask;
-    }
-
-    /// Convert a single component to its bitmask representation at runtime.
-    /// Each component gets a unique bit position based on its enum value.
-    pub fn componentToBit(component: CR.ComponentName) CR.ComponentMask {
-        const bit_position = @intFromEnum(component);
-        return @as(CR.ComponentMask, 1) << @intCast(bit_position);
-    }
-
-    /// Add a component to an existing mask at runtime
-    pub fn addComponent(mask: CR.ComponentMask, component: CR.ComponentName) CR.ComponentMask {
-        return mask | componentToBit(component);
-    }
-
-    /// Remove a component from an existing mask at runtime
-    pub fn removeComponent(mask: CR.ComponentMask, component: CR.ComponentName) CR.ComponentMask {
-        return mask & ~componentToBit(component);
-    }
-};

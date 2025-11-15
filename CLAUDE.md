@@ -25,3 +25,5 @@ The determination happens in a single loop for efficiency:
 2. If any component doesn't exist in the pool → pool excluded entirely (break)
 3. If component exists but not in REQ_MASK → req_match becomes false, continue checking remaining components
 4. After checking all components: req_match = Direct, query_match only = Lookup
+- Check taskwarrior tasks to get a sense of what is currently being implememnted
+- I have no current plans for entities to be able to migrate into other pools.

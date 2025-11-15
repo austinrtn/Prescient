@@ -133,14 +133,15 @@ const MigrationResult = struct {
 pub fn ArchetypePool(comptime req: []const CR.ComponentName, comptime opt: []const CR.ComponentName) type {
     const pool_components = req ++ opt;
     const archetype_type = ComponentArrayStorage(pool_components);
-    const POOL_MASK = comptime MM.Comptime.createMask(pool_components);
-    
+    const MaskManager = comptime MM.MaskManager(pool_components);
+    const POOL_MASK = comptime MaskManager.Comptime.createMask(pool_components);
+
     return struct {
         const Self = @This();
-        const pool_name = std.meta.stringToEnum(PR.pool_name, @typeName(@TypeOf(Self))) orelse @compileError("Pool not registred");
 
         pub const pool_mask = POOL_MASK;
-        pub const REQ_MASK = MM.Comptime.createMask(req);
+        pub const REQ_MASK = MaskManager.Comptime.createMask(req);
+
         pub const COMPONENTS = pool_components;
         pub const REQ_COMPONENTS = req;
         pub const OPT_COMPONENTS = opt;
@@ -183,9 +184,9 @@ pub fn ArchetypePool(comptime req: []const CR.ComponentName, comptime opt: []con
                     @field(archetype, field.name) = ArrayList(Entity){};
                 } else {
                     const component_name = comptime std.meta.stringToEnum(CR.ComponentName, field.name).?;
-                    const field_bit = comptime MM.Comptime.componentToBit(component_name);
+                    const field_bit = comptime MaskManager.Comptime.componentToBit(component_name);
 
-                    if(MM.maskContains(mask, field_bit)) {
+                    if(MaskManager.maskContains(mask, field_bit)) {
                         const T = CR.getTypeByName(component_name);
                         const array_list_ptr = try allocator.create(ArrayList(T));
                         array_list_ptr.* = ArrayList(T){};
@@ -257,7 +258,7 @@ pub fn ArchetypePool(comptime req: []const CR.ComponentName, comptime opt: []con
             // Note: Required component validation is handled by Builder type system
             // Builder has non-optional fields for all required components, so they must be provided
 
-            const mask = comptime MM.Comptime.createMask(&components);
+            const mask = comptime MaskManager.Comptime.createMask(&components);
             const archetype_idx = try self.getOrCreateArchetype(mask);
             const archetype = &self.archetype_list.items[archetype_idx];
 
@@ -316,10 +317,10 @@ pub fn ArchetypePool(comptime req: []const CR.ComponentName, comptime opt: []con
                 if(!comptime std.mem.eql(u8, "entities", field.name)) {
                     // Get component bit at comptime
                     const component_name = comptime std.meta.stringToEnum(CR.ComponentName, field.name).?;
-                    const field_bit = comptime MM.Comptime.componentToBit(component_name);
+                    const field_bit = comptime MaskManager.Comptime.componentToBit(component_name);
 
                     // Only process if this component exists in the entity's mask
-                    if (MM.maskContains(entity_mask, field_bit)) {
+                    if (MaskManager.maskContains(entity_mask, field_bit)) {
                         const component_array = &@field(archetype, field.name);
                         if(component_array.* != null)  {
                             var comp_array = component_array.*.?;
@@ -383,11 +384,11 @@ pub fn ArchetypePool(comptime req: []const CR.ComponentName, comptime opt: []con
                 return error.NullComponentData;
             }
 
-            const component_bit = MM.Comptime.componentToBit(component);
+            const component_bit = MaskManager.Comptime.componentToBit(component);
 
             if(direction == .adding) {
-                const new_mask = MM.Runtime.addComponent(entity_mask, component);
-                if(MM.maskContains(entity_mask, component_bit)) { return error.AddingExistingComponent; }
+                const new_mask = MaskManager.Runtime.addComponent(entity_mask, component);
+                if(MaskManager.maskContains(entity_mask, component_bit)) { return error.AddingExistingComponent; }
 
                 const migration = MigrationEntry(pool_components) {
                     .entity = entity,
@@ -406,8 +407,8 @@ pub fn ArchetypePool(comptime req: []const CR.ComponentName, comptime opt: []con
             }
 
             else if(direction == .removing){
-                const new_mask = MM.Runtime.removeComponent(entity_mask, component);
-                if(!MM.maskContains(entity_mask, component_bit)) { return error.RemovingNonexistingComponent; }
+                const new_mask = MaskManager.Runtime.removeComponent(entity_mask, component);
+                if(!MaskManager.maskContains(entity_mask, component_bit)) { return error.RemovingNonexistingComponent; }
 
                 const migration = MigrationEntry(pool_components) {
                     .entity = entity,
@@ -511,10 +512,10 @@ pub fn ArchetypePool(comptime req: []const CR.ComponentName, comptime opt: []con
                 if(!comptime std.mem.eql(u8, "entities", field.name)) {
                     // Get component bit at comptime
                     const component_name = comptime std.meta.stringToEnum(CR.ComponentName, field.name).?;
-                    const field_bit = comptime MM.Comptime.componentToBit(component_name);
+                    const field_bit = comptime MaskManager.Comptime.componentToBit(component_name);
 
                     // Skip if component doesn't exist in either mask
-                    if (MM.maskContains(new_mask, field_bit) or MM.maskContains(old_mask, field_bit)) {
+                    if (MaskManager.maskContains(new_mask, field_bit) or MaskManager.maskContains(old_mask, field_bit)) {
                         const maybe_src = &@field(src_archetype, field.name);
                         const maybe_dest = &@field(dest_archetype, field.name);
 
@@ -581,7 +582,7 @@ pub fn ArchetypePool(comptime req: []const CR.ComponentName, comptime opt: []con
         }
 
         fn validateComponentInArchetype(archetype_mask: CR.ComponentMask, component: CR.ComponentName) !void {
-            if(!MM.maskContains(archetype_mask, MM.Runtime.componentToBit(component))) {
+            if(!MaskManager.maskContains(archetype_mask, MaskManager.Runtime.componentToBit(component))) {
                 std.debug.print("\nEntity does not have component: {s}\n", .{@tagName(component)});
                 return error.ComponentNotInArchetype;
             }
