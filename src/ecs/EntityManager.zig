@@ -5,8 +5,7 @@ const Allocator = std.mem.Allocator;
 const ComponentRegistry = @import("ComponentRegistry.zig");
 const ComponentName = ComponentRegistry.ComponentName;
 const getComponentByName = ComponentRegistry.GetComponentByName;
-const Mask = ComponentRegistry.ComponentMask;
-const PoolName = @import("PoolRegistry.zig").pool_name;
+const PoolName = @import("PoolRegistry.zig").PoolName;
 
 pub const EntityManagerErrors = error{NoAvailableEntities};
 
@@ -18,8 +17,9 @@ pub const Entity = struct {
 pub const EntitySlot = struct {
     index: u32,
     generation: u32 = 0,
-    pool_mask: Mask = undefined,
-    mask: Mask = undefined,
+
+    pool_name: PoolName = undefined,
+    mask_list_index: u32 = undefined,
     storage_index: u32 = undefined,
 
     pub fn getEntity(self: *@This()) Entity {
@@ -50,17 +50,22 @@ pub const EntityManager = struct {
         return slot;
     }
 
-    pub fn getNewSlot(self: *Self, storage_index: u32, pool_mask: Mask, mask: Mask) !*EntitySlot {
+    pub fn getNewSlot(
+            self: *Self, 
+            pool_name: PoolName, 
+            mask_list_index: u32,
+            storage_index: u32,
+        ) !*EntitySlot {
         const index = if (self.available_entities.pop()) |indx|
             indx
         else blk: {
             const new_index = @as(u32, @intCast(self.entity_slots.items.len));
             try self.entity_slots.append(self.allocator, .{
                 .index = new_index,
-                .storage_index = storage_index, 
-                .mask = mask,
-                .pool_mask = pool_mask,
                 .generation = 0,
+                .pool_name = pool_name,
+                .mask_list_index = mask_list_index,
+                .storage_index = storage_index, 
             });
             break :blk new_index;
         };

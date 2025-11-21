@@ -7,6 +7,7 @@ const testing = std.testing;
 const EM = @import("EntityManager.zig");
 
 pub const PoolConfig = struct {
+    name: PR.PoolName,
     req: []const CR.ComponentName,
     opt: []const CR.ComponentName,
 };
@@ -14,7 +15,7 @@ pub const PoolConfig = struct {
 pub fn PoolInterface(comptime config: PoolConfig) type {
     return struct {
         const Self = @This();
-        const Pool = AP.ArchetypePool(config.req, config.opt);
+        const Pool = AP.ArchetypePool(config.req, config.opt, config.name);
 
         pool: *Pool,
         entity_manager: *EM.EntityManager,
@@ -36,35 +37,35 @@ pub fn PoolInterface(comptime config: PoolConfig) type {
             var entity_slot = try self.entity_manager.getNewSlot(undefined, pool_mask, undefined);
 
             const result = try self.pool.addEntity(entity_slot.getEntity(), component_data);
-            entity_slot.storage_index = result.index;
-            entity_slot.mask = result.mask;
-            entity_slot.pool_mask = pool_mask;
+            entity_slot.storage_index = result.storage_index;
+            entity_slot.mask_list_index = result.archetype_index;
+            entity_slot.pool_name = Pool.NAME;
 
             return entity_slot.getEntity();
         }
 
         pub fn destroyEntity(self: *Self, entity: EM.Entity) !void {
             const entity_slot = try self.entity_manager.getSlot(entity);
-            const swapped_entity = try self.pool.remove_entity(entity_slot.storage_index, entity_slot.mask, entity_slot.pool_mask);
-            
+            const swapped_entity = try self.pool.remove_entity(entity_slot.mask_list_index, entity_slot.storage_index, entity_slot.pool_name);
+
             if(!std.meta.eql(entity_slot.getEntity(), swapped_entity)) {
                 const swapped_slot = try self.entity_manager.getSlot(swapped_entity);
-                swapped_slot.storage_index = entity_slot.storage_index; 
+                swapped_slot.storage_index = entity_slot.storage_index;
             }
             try self.entity_manager.remove(entity_slot);
         }
 
         pub fn getComponent(self: *Self, entity: EM.Entity, comptime component: CR.ComponentName) !*CR.getTypeByName(component){
             const entity_slot = try self.entity_manager.getSlot(entity);
-            return self.pool.getComponent(entity_slot.storage_index, entity_slot.mask, entity_slot.pool_mask, component);
+            return self.pool.getComponent(entity_slot.mask_list_index, entity_slot.storage_index, entity_slot.pool_name, component);
         }
 
         pub fn addComponent(self: *Self, entity: EM.Entity, comptime component: CR.ComponentName, data: CR.getTypeByName(component)) !void {
             const entity_slot = try self.entity_manager.getSlot(entity);
             try self.pool.addOrRemoveComponent(
                 entity, 
-                entity_slot.mask, 
-                entity_slot.pool_mask, 
+                entity_slot.mask_list_index, 
+                entity_slot.pool_name, 
                 entity_slot.storage_index, 
                 .adding, 
                 component, 
@@ -76,8 +77,8 @@ pub fn PoolInterface(comptime config: PoolConfig) type {
             const entity_slot = try self.entity_manager.getSlot(entity);
             try self.pool.addOrRemoveComponent(
                 entity, 
-                entity_slot.mask, 
-                entity_slot.pool_mask, 
+                entity_slot.mask_list_index, 
+                entity_slot.pool_name, 
                 entity_slot.storage_index, 
                 .removing, 
                 component, 
@@ -100,19 +101,21 @@ test "flush" {
         pool_manager.deinit();
         entity_manager.deinit();
     }
-    var interface = PoolInterface(PoolConfig{ .req = &.{}, .opt = &.{.Position, .Velocity}}).init(movement_pool, &entity_manager);
+    var interface = PoolInterface(PoolConfig{ .name = .MovementPool, .req = &.{}, .opt = &.{.Position, .Velocity}}).init(movement_pool, &entity_manager);
 
     const ent = try interface.createEntity(.{.Position = CR.Position{.x = 3, .y = 4}});
     const slot = try interface.entity_manager.getSlot(ent);
-    try testing.expect(slot.mask == 1);
+    const mask_before = movement_pool.mask_list.items[slot.mask_list_index];
+    try testing.expect(mask_before == 1);
     try interface.addComponent(ent, .Velocity, .{.dx = 4, .dy = 0});
     try interface.flushMigrationQueue();
-    try testing.expect(slot.mask == 3);
+    const mask_after = movement_pool.mask_list.items[slot.mask_list_index];
+    try testing.expect(mask_after == 3);
 }
 //
 // test "create entity and add component" {
 //     var entity_manager = try EM.EntityManager.init(testing.allocator);
-//     const MovementPool = AP.ArchetypePool(&.{}, &.{.Position, .Velocity});
+//     const MovementPool = AP.ArchetypePool(&.{}, &.{.Position, .Velocity}, .Misc);
 //     var movement_pool = try MovementPool.init(testing.allocator);
 //
 //     defer {
@@ -171,7 +174,7 @@ test "flush" {
 //
 // test "remove component" {
 //     var entity_manager = try EM.EntityManager.init(testing.allocator);
-//     const MovementPool = AP.ArchetypePool(&.{}, &.{.Position, .Velocity});
+//     const MovementPool = AP.ArchetypePool(&.{}, &.{.Position, .Velocity}, .Misc);
 //     var movement_pool = try MovementPool.init(testing.allocator);
 //
 //     defer {
@@ -196,7 +199,7 @@ test "flush" {
 //
 // test "get component" {
 //     var entity_manager = try EM.EntityManager.init(testing.allocator);
-//     const MovementPool = AP.ArchetypePool(&.{}, &.{.Position, .Velocity});
+//     const MovementPool = AP.ArchetypePool(&.{}, &.{.Position, .Velocity}, .Misc);
 //     var movement_pool = try MovementPool.init(testing.allocator);
 //
 //     defer {
@@ -225,7 +228,7 @@ test "flush" {
 //
 // test "destroy Entity" {
 //     var entity_manager = try EM.EntityManager.init(testing.allocator);
-//     const MovementPool = AP.ArchetypePool(&.{}, &.{.Position, .Velocity});
+//     const MovementPool = AP.ArchetypePool(&.{}, &.{.Position, .Velocity}, .Misc);
 //     var movement_pool = try MovementPool.init(testing.allocator);
 //
 //     defer {
@@ -260,8 +263,8 @@ test "flush" {
 //
 // test "catch pool mismatch bug" {
 //     var entity_manager = try EM.EntityManager.init(testing.allocator);
-//     const MovementPool = AP.ArchetypePool(&.{}, &.{.Position, .Velocity});
-//     const AllPool = AP.ArchetypePool(&.{}, &.{.Position, .Velocity, .Attack});
+//     const MovementPool = AP.ArchetypePool(&.{}, &.{.Position, .Velocity}, .Misc);
+//     const AllPool = AP.ArchetypePool(&.{}, &.{.Position, .Velocity, .Attack}, .Misc);
 //     var movement_pool = try MovementPool.init(testing.allocator);
 //     var all_pool = try AllPool.init(testing.allocator);
 //

@@ -7,27 +7,27 @@ const mm = @import("MaskManager.zig");
 /// Basic movement pool for entities that can move
 /// Required: (none)
 /// Optional: Position, Velocity
-pub const MovementPool = ArchPool.ArchetypePool(&.{}, &.{.Position, .Velocity});
+pub const MovementPool = ArchPool.ArchetypePool(&.{}, &.{.Position, .Velocity}, .MovementPool);
 
 /// Enemy entities with combat and AI capabilities
 /// Required: (none)
 /// Optional: Position, Velocity, Attack, Health, AI
-pub const EnemyPool = ArchPool.ArchetypePool(&.{}, &.{.Position, .Velocity, .Attack, .Health, .AI});
+pub const EnemyPool = ArchPool.ArchetypePool(&.{}, &.{.Position, .Velocity, .Attack, .Health, .AI}, .EnemyPool);
 
 /// Player entities - must have a position
 /// Required: Position
 /// Optional: Health, Attack, Sprite, Player
-pub const PlayerPool = ArchPool.ArchetypePool(&.{.Position}, &.{.Health, .Attack, .Sprite, .Player});
+pub const PlayerPool = ArchPool.ArchetypePool(&.{.Position}, &.{.Health, .Attack, .Sprite, .Player}, .PlayerPool);
 
 /// Renderable entities that can be drawn to screen
 /// Required: Position, Sprite
 /// Optional: Velocity
-pub const RenderablePool = ArchPool.ArchetypePool(&.{.Position, .Sprite}, &.{.Velocity});
+pub const RenderablePool = ArchPool.ArchetypePool(&.{.Position, .Sprite}, &.{.Velocity}, .RenderablePool);
 
 /// Combat entities that can fight
 /// Required: Health, Attack
 /// Optional: AI
-pub const CombatPool = ArchPool.ArchetypePool(&.{.Health, .Attack}, &.{.AI});
+pub const CombatPool = ArchPool.ArchetypePool(&.{.Health, .Attack}, &.{.AI}, .CombatPool);
 
 pub const PoolName = enum(u32) {
     MovementPool,
@@ -35,6 +35,7 @@ pub const PoolName = enum(u32) {
     PlayerPool,
     RenderablePool,
     CombatPool,
+    Misc,
 };
 
 pub const pool_types = [_]type{
@@ -141,7 +142,7 @@ pub fn PoolManager() type {
                 var slot = try entity_manager.getSlot(result.entity);
                 const storage_index_holder = slot.storage_index;
 
-                slot.mask = result.entity_mask;
+                slot.mask_list_index = result.mask_list_index;
                 slot.storage_index = result.archetype_index;
 
                 if(result.swapped_entity) |swapped_ent| {
@@ -169,7 +170,8 @@ test "flushAllPools" {
     // Create entity with Position
     const entity = try iface.createEntity(.{ .Position = .{ .x = 10.0, .y = 20.0 } });
     const slot_before = try entity_manager.getSlot(entity);
-    try std.testing.expect(!mm.maskContains(slot_before.mask, mm.Comptime.componentToBit(.Velocity)));
+    const mask_before = movement_pool.mask_list.items[slot_before.mask_list_index];
+    try std.testing.expect(!mm.maskContains(mask_before, mm.Comptime.componentToBit(.Velocity)));
 
     // Queue a migration to add Velocity
     try iface.addComponent(entity, .Velocity, .{ .dx = 5.0, .dy = 10.0 });
@@ -178,5 +180,6 @@ test "flushAllPools" {
     try pool_manager.flushAllPools(&entity_manager);
 
     const slot_after = try entity_manager.getSlot(entity);
-    try std.testing.expect(mm.maskContains(slot_after.mask, mm.Comptime.componentToBit(.Velocity)));
+    const mask_after = movement_pool.mask_list.items[slot_after.mask_list_index];
+    try std.testing.expect(mm.maskContains(mask_after, mm.Comptime.componentToBit(.Velocity)));
 }

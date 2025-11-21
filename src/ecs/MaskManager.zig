@@ -25,7 +25,7 @@ pub fn MaskManager(comptime COMPONENTS: []const CR.ComponentName) type {
         }
 
         pub const Comptime = struct {
-            pub fn createMask(comptime components: []CR.ComponentName) Mask {
+            pub fn createMask(comptime components: []const CR.ComponentName) Mask {
                 var mask: Mask = 0;
                 inline for (components) |component| {
                     mask |= Self.Comptime.componentToBit(component);
