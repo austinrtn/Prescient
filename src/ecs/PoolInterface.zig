@@ -63,31 +63,49 @@ pub fn PoolInterface(comptime config: PoolConfig) type {
         pub fn addComponent(self: *Self, entity: EM.Entity, comptime component: CR.ComponentName, data: CR.getTypeByName(component)) !void {
             const entity_slot = try self.entity_manager.getSlot(entity);
             try self.pool.addOrRemoveComponent(
-                entity, 
-                entity_slot.mask_list_index, 
-                entity_slot.pool_name, 
-                entity_slot.storage_index, 
-                .adding, 
-                component, 
+                entity,
+                entity_slot.mask_list_index,
+                entity_slot.pool_name,
+                entity_slot.storage_index,
+                entity_slot.is_migrating,
+                .adding,
+                component,
                 data
             );
+            entity_slot.is_migrating = true;
         }
 
         pub fn removeComponent(self: *Self, entity: EM.Entity, comptime component: CR.ComponentName) !void {
             const entity_slot = try self.entity_manager.getSlot(entity);
             try self.pool.addOrRemoveComponent(
-                entity, 
-                entity_slot.mask_list_index, 
-                entity_slot.pool_name, 
-                entity_slot.storage_index, 
-                .removing, 
-                component, 
+                entity,
+                entity_slot.mask_list_index,
+                entity_slot.pool_name,
+                entity_slot.storage_index,
+                entity_slot.is_migrating,
+                .removing,
+                component,
                 null,
             );
+            entity_slot.is_migrating = true;
         }
 
         pub fn flushMigrationQueue(self: *Self) !void {
-            try PR.PoolManager().flushMigrationQueue(self.pool, self.entity_manager); 
+            const results = try self.pool.flushMigrationQueue();
+            defer self.entity_manager.allocator.free(results);
+
+            for (results) |result| {
+                const slot = try self.entity_manager.getSlot(result.entity);
+                slot.storage_index = result.archetype_index;
+                slot.mask_list_index = result.mask_list_index;
+                slot.is_migrating = false;
+
+                // Update swapped entity's storage index if a swap occurred
+                if (result.swapped_entity) |swapped| {
+                    const swapped_slot = try self.entity_manager.getSlot(swapped);
+                    swapped_slot.storage_index = slot.storage_index;
+                }
+            }
         }
     };
 }

@@ -17,6 +17,7 @@ pub const Entity = struct {
 pub const EntitySlot = struct {
     index: u32,
     generation: u32 = 0,
+    is_migrating: bool = false,
 
     pool_name: PoolName = undefined,
     mask_list_index: u32 = undefined,

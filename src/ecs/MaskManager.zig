@@ -79,3 +79,5 @@ pub fn MaskManager(comptime COMPONENTS: []const CR.ComponentName) type {
         };
     };
 }
+
+pub const GlobalMaskManager = MaskManager(std.enums.values(CR.ComponentName));

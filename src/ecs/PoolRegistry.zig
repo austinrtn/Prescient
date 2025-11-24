@@ -2,7 +2,7 @@ const std = @import("std");
 const cr = @import("ComponentRegistry.zig");
 const ArchPool = @import("ArchetypePool.zig");
 const em = @import("EntityManager.zig");
-const mm = @import("MaskManager.zig");
+const MaskManager = @import("MaskManager.zig").GlobalMaskManager;
 
 /// Basic movement pool for entities that can move
 /// Required: (none)
@@ -35,7 +35,6 @@ pub const PoolName = enum(u32) {
     PlayerPool,
     RenderablePool,
     CombatPool,
-    Misc,
 };
 
 pub const pool_types = [_]type{
@@ -171,7 +170,7 @@ test "flushAllPools" {
     const entity = try iface.createEntity(.{ .Position = .{ .x = 10.0, .y = 20.0 } });
     const slot_before = try entity_manager.getSlot(entity);
     const mask_before = movement_pool.mask_list.items[slot_before.mask_list_index];
-    try std.testing.expect(!mm.maskContains(mask_before, mm.Comptime.componentToBit(.Velocity)));
+    try std.testing.expect(!MaskManager.maskContains(mask_before, MaskManager.Comptime.componentToBit(.Velocity)));
 
     // Queue a migration to add Velocity
     try iface.addComponent(entity, .Velocity, .{ .dx = 5.0, .dy = 10.0 });
@@ -181,5 +180,5 @@ test "flushAllPools" {
 
     const slot_after = try entity_manager.getSlot(entity);
     const mask_after = movement_pool.mask_list.items[slot_after.mask_list_index];
-    try std.testing.expect(mm.maskContains(mask_after, mm.Comptime.componentToBit(.Velocity)));
+    try std.testing.expect(MaskManager.maskContains(mask_after, MaskManager.Comptime.componentToBit(.Velocity)));
 }

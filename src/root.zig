@@ -8,6 +8,6 @@ test {
     _ = @import("ecs/PoolRegistry.zig");
     //_ = @import("ecs/ArchetypePool.zig");
     _ = @import("ecs/PoolInterface.zig");
-    // _ = @import("ecs/Query.zig");
+    _ = @import("ecs/Query.zig");
 }
 
