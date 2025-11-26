@@ -16,18 +16,17 @@ const ArchetypeAccess = enum{
     Lookup,
 };
 
-fn ComponentSliceStorage(comptime components: []const CR.ComponentName) type {
+fn ArchetypeCache(comptime components: []const CR.ComponentName) type {
     var fields: [components.len]StructField = undefined;
-
+    //~Field: CompName: []Component
     for(components, 0..) |comp, i| {
         const name = @tagName(comp);
-        const T = ArrayList([]CR.getTypeByName(comp));
-        const default_value = comptime ArrayList([]CR.getTypeByName(comp)){};
+        const T = []CR.getTypeByName(comp);
         fields[i] = StructField{
             .name = name,
             .type = T,
             .alignment = @alignOf(T),
-            .default_value_ptr = &default_value,
+            .default_value_ptr = null,
             .is_comptime = false,
         };
     }
@@ -41,13 +40,20 @@ fn ComponentSliceStorage(comptime components: []const CR.ComponentName) type {
             .decls = &.{},
         }
     });
-}
+} 
+
+//const ArchetypeCache = struct {
+//  Position: []PositionComponent,
+//  Velocity: []VelocityComponent,
+//};
 
 fn PoolElementType(comptime components: []const CR.ComponentName) type {
-    var fields: [3]StructField = undefined;
+    var fields: [4]StructField = undefined;
     const default_arch_list = comptime ArrayList(usize){};
-    const storage_type = ComponentSliceStorage(components);
+    const arch_cache_arraylist = comptime ArrayList(ArchetypeCache(components));
+    const arch_cache_default = comptime arch_cache_arraylist{};
 
+    //~Field:pool_name: PoolName 
     fields[0] = StructField{
         .name = "pool_name",
         .type = PR.PoolName,
@@ -56,6 +62,7 @@ fn PoolElementType(comptime components: []const CR.ComponentName) type {
         .is_comptime = false,
     };
 
+    //~Field:access: ArchAccess
     fields[1] = StructField{
         .name = "access",
         .type = ArchetypeAccess,
@@ -64,6 +71,7 @@ fn PoolElementType(comptime components: []const CR.ComponentName) type {
         .is_comptime = false,
     };
     
+    //~Field: archetype_indices: AL(usize)
     fields[2] = StructField{
         .name = "archetype_indices",
         .type = ArrayList(usize),
@@ -72,12 +80,13 @@ fn PoolElementType(comptime components: []const CR.ComponentName) type {
         .is_comptime = false,
     };
 
+    //~Field: archetype_cache: AL(ArchCache)
     fields[3] = StructField{
-        .name = "storage",
-        .type = storage_type,
-        .alignment = @alignOf(storage_type),
+        .name = "archetype_cache",
+        .type = arch_cache_arraylist,
+        .alignment = @alignOf(arch_cache_arraylist),
         .is_comptime = false,
-        .default_value_ptr = null,
+        .default_value_ptr = &arch_cache_default,
     };
 
     return @Type(.{
@@ -91,10 +100,43 @@ fn PoolElementType(comptime components: []const CR.ComponentName) type {
     });
 }
 
-fn findPoolElements(comptime components: []const CR.ComponentName) []PoolElementType(components) {
+fn countMatchingPools(comptime components: []const CR.ComponentName) comptime_int {
+    var count: comptime_int = 0;
+
+    for(PR.pool_types) |pool_type| {
+        var query_match = true;
+        var req_match = true;
+
+        for(components) |component| {
+            const component_bit = MaskManager.Comptime.componentToBit(component);
+            const in_pool = MaskManager.maskContains(pool_type.pool_mask, component_bit);
+
+            if(!in_pool) {
+                query_match = false;
+                req_match = false;
+                break;
+            }
+
+            if(req_match) {
+                const contained_in_req = MaskManager.maskContains(pool_type.REQ_MASK, component_bit);
+                if(!contained_in_req) {
+                    req_match = false;
+                }
+            }
+        }
+
+        if(req_match or query_match) {
+            count += 1;
+        }
+    }
+    return count;
+}
+
+fn findPoolElements(comptime components: []const CR.ComponentName) [countMatchingPools(components)]PoolElementType(components) {
     const PoolElement = PoolElementType(components);
-    var pool_elements: [PR.pool_types.len]PoolElement = undefined;
-    var count: usize = 0;
+    const count = countMatchingPools(components);
+    var pool_elements: [count]PoolElement = undefined;
+    var idx: usize = 0;
 
     // Check each registered pool type to see if it matches the query
     for(PR.pool_types, 0..) |pool_type, i| {
@@ -130,27 +172,26 @@ fn findPoolElements(comptime components: []const CR.ComponentName) []PoolElement
         // Direct access: all query components are required in this pool
         // Every archetype in the pool is guaranteed to have them
         if(req_match) {
-            const pool_element = PoolElement{.pool_name = pool_name, .access = .Direct};
-            pool_elements[count] = pool_element;
-            count += 1;
+            pool_elements[idx] = PoolElement{.pool_name = pool_name, .access = .Direct};
+            idx += 1;
         }
         // Lookup access: all query components exist but at least one is optional
         // Need to check each archetype individually to see if it matches
         else if(!req_match and query_match) {
-            const pool_element = PoolElement{.pool_name = pool_name, .access = .Lookup};
-            pool_elements[count] = pool_element;
-            count += 1;
+            pool_elements[idx] = PoolElement{.pool_name = pool_name, .access = .Lookup};
+            idx += 1;
         }
     }
-    return pool_elements[0..count];
+    return pool_elements;
 }
 
 fn QueryStorageType(
     comptime PoolElement: type,
-    comptime found_pool_elements: []PoolElement,
+    comptime found_pool_elements: anytype,
     ) type {
     var fields: [found_pool_elements.len]std.builtin.Type.StructField = undefined;
 
+    //~Field: pool_name: PoolElement
     for(found_pool_elements, 0..) |pool_element, i| {
         fields[i] = std.builtin.Type.StructField{
             .name = @tagName(pool_element.pool_name),
@@ -172,7 +213,7 @@ fn QueryStorageType(
     });
 }
 
-fn QueryStorage(comptime PoolElement: type, comptime found_pool_elements: []PoolElement) QueryStorageType(PoolElement, found_pool_elements){
+fn QueryStorage(comptime PoolElement: type, comptime found_pool_elements: anytype) QueryStorageType(PoolElement, found_pool_elements){
     var storage: QueryStorageType(PoolElement, found_pool_elements) = undefined;
     for(found_pool_elements) |pool_element| {
         const field_name = @tagName(pool_element.pool_name);
@@ -189,11 +230,11 @@ fn QueryStorage(comptime PoolElement: type, comptime found_pool_elements: []Pool
 
 pub fn Query(comptime components: []const CR.ComponentName) type {
     const PoolElement = PoolElementType(components);
-    const found_pool_elements = findPoolElements(components);
+    const found_pool_elements = comptime findPoolElements(components);
     const POOL_COUNT = found_pool_elements.len;
 
-    const QStorageType = QueryStorageType(PoolElement, found_pool_elements);
-    const QStorage = QueryStorage(PoolElement, found_pool_elements);
+    const QStorageType = QueryStorageType(PoolElement, &found_pool_elements);
+    const QStorage = QueryStorage(PoolElement, &found_pool_elements);
 
     return struct {
         const Self = @This();
@@ -217,7 +258,11 @@ pub fn Query(comptime components: []const CR.ComponentName) type {
         }
 
         pub fn deinit(self: *Self) void {
-            _ = self;
+            inline for(std.meta.fields(QStorageType)) |field| {
+                const pool_element = &@field(self.query_storage, field.name);
+                pool_element.archetype_indices.deinit(self.allocator);
+                pool_element.archetype_cache.deinit(self.allocator);
+            }
         }
 
         pub fn cacheArchetypesFromPools(self: *Self) !void {
@@ -249,22 +294,16 @@ pub fn Query(comptime components: []const CR.ComponentName) type {
             try pool_element.archetype_indices.append(self.allocator, archetype_index);
 
             // Iterate over component fields in the PoolElement type
-            inline for(std.meta.fields(@TypeOf(pool_element.*))) |field| {
-                // Only process component fields (skip metadata fields)
-                const is_component_field = comptime !std.mem.eql(u8, field.name, "pool_name") and
-                                                     !std.mem.eql(u8, field.name, "access") and
-                                                     !std.mem.eql(u8, field.name, "archetype_indices");
-
-                if (comptime is_component_field) {
-                    // Only cache if this component exists in the archetype storage
-                    if (@hasField(@TypeOf(storage.*), field.name)) {
-                        const slice = @field(storage, field.name).?.items;
-                        try @field(pool_element, field.name).append(self.allocator, slice);
-                    }
+            inline for(std.meta.fields(@TypeOf(pool_element.*.archetype_cache))) |field| {
+            // Only process component fields (skip metadata fields)
+                // Only cache if this component exists in the archetype storage
+                if (@hasField(@TypeOf(storage.*), field.name)) {
+                    const slice = @field(storage, field.name).?.items;
+                    try @field(pool_element.archetypes_list, field.name).append(self.allocator, slice);
                 }
             }
-            std.debug.print("\n{any}", .{self.query_storage});
         }
+
         //Check each pool to see which archetypes match the query
         // pub fn update(self: *Self) !void{
         //     var archetypes_list: ArrayList(MaskManager.Mask) = .{};

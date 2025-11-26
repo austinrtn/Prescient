@@ -51,14 +51,7 @@ fn ComponentArrayStorage(comptime pool_components: []const CR.ComponentName) typ
             .is_tuple = false,
         },
     });
-}Error detected while processing BufEnter Autocommands for "<buffer=8>":
-Error executing lua callback: /home/dogmaticpolack/.config/nvim/lua/plugins/zls.lua:23: attempt to call field 'on_attach' (a nil value)
-stack traceback:
-        /home/dogmaticpolack/.config/nvim/lua/plugins/zls.lua:23: in function '_on_attach'
-        ...share/nvim/lazy/nvim-lspconfig/lua/lspconfig/configs.lua:260: in function '_setup_buffer'
-        ...share/nvim/lazy/nvim-lspconfig/lua/lspconfig/configs.lua:221: in function <...share/nvim/lazy/nvim-lspconfig/lua/lspconfig/configs.lua:220>
-Press ENTER or type command to continue
-
+}
 const MoveDirection = enum {
     adding,
     removing,
@@ -137,6 +130,7 @@ pub fn ArchetypePool(comptime req: []const CR.ComponentName, comptime opt: []con
         const Self = @This();
 
         pub const pool_mask = POOL_MASK;
+
         pub const REQ_MASK = MaskManager.Comptime.createMask(req);
 
         pub const COMPONENTS = pool_components;
