@@ -249,10 +249,17 @@ pub fn Query(comptime components: []const CR.ComponentName) type {
         archetype_index: usize = 0,
 
         pub fn init(allocator: std.mem.Allocator, pool_manager: *PR.PoolManager()) Self {
-            const self = Self{
+            var self = Self{
                 .allocator = allocator,
                 .pool_manager = pool_manager,
             };
+
+            // Initialize the ArrayLists in each pool element
+            inline for(std.meta.fields(QStorageType)) |field| {
+                var pool_element = &@field(self.query_storage, field.name);
+                pool_element.archetype_indices = ArrayList(usize){};
+                pool_element.archetype_cache = ArrayList(ArchetypeCache(components)){};
+            }
 
             return self;
         }
@@ -287,21 +294,26 @@ pub fn Query(comptime components: []const CR.ComponentName) type {
             }
         }
 
+        ///Convert archetype storage into Query Struct and append it to query cache
         pub fn cache(self: *Self, pool_element: anytype, pool: anytype, archetype_index: usize) !void {
+            const ArchCacheType = comptime ArchetypeCache(components);
             const storage = &pool.archetype_list.items[archetype_index];
 
             // Add archetype index to the list
             try pool_element.archetype_indices.append(self.allocator, archetype_index);
 
             // Iterate over component fields in the PoolElement type
-            inline for(std.meta.fields(@TypeOf(pool_element.*.archetype_cache))) |field| {
+            var archetype_cache:ArchCacheType = undefined;
+            inline for(std.meta.fields(ArchCacheType)) |field| {
             // Only process component fields (skip metadata fields)
                 // Only cache if this component exists in the archetype storage
                 if (@hasField(@TypeOf(storage.*), field.name)) {
                     const slice = @field(storage, field.name).?.items;
-                    try @field(pool_element.archetypes_list, field.name).append(self.allocator, slice);
+                    @field(archetype_cache, field.name) = slice;
                 }
             }
+
+            try pool_element.archetype_cache.append(self.allocator, archetype_cache);
         }
 
         //Check each pool to see which archetypes match the query
@@ -337,11 +349,37 @@ pub fn Query(comptime components: []const CR.ComponentName) type {
         //     self.cached_archetypes = archetypes_list;
         // }
         //
-        // pub fn next(self: *Self) !?ComponentDataContainer {
-        //     if(self.pool_index == self.pool_count) return null;
-        //     
-        //     const archetype
-        // }
+        pub fn next(self: *Self) ?ArchetypeCache(components){
+            while(true){
+                switch(self.pool_index){
+                    inline 0...(pool_count - 1) =>|i|{
+                        const field = std.meta.fields(QStorageType)[i];
+                        const pool_elem = &@field(self.query_storage, field.name);
+
+                        if(pool_elem.archetype_cache.items.len > 0) {
+                            const arch_cache = pool_elem.archetype_cache.items[self.archetype_index];
+                            self.archetype_index += 1;
+
+                            if(self.archetype_index >= pool_elem.archetype_cache.items.len){
+                                self.archetype_index = 0;
+                                self.pool_index += 1;
+                            }
+
+                            return arch_cache;
+                        }
+                        else {
+                            self.pool_index += 1;
+                            if(self.pool_index >= POOL_COUNT) {
+                                self.archetype_index = 0;
+                                self.pool_index = 0;
+                                return null;
+                            }
+                        }
+                    },
+                    else => unreachable,
+                }
+            }
+        }
     };
 }
 
@@ -369,7 +407,7 @@ test "Basic Query" {
     _ = ent1;
     const ent2 = try combat_interface.createEntity(.{
         .Health = CR.Health{.current = 50, .max = 100},
-        .Attack = .{.damage = 10.0, .crit_chance = 50},
+        .Attack = CR.Attack{.damage = 10.0, .crit_chance = 1},
         .AI = CR.AI{.state = 5, .target_id = 0},
     });
     _ = ent2;
@@ -377,4 +415,81 @@ test "Basic Query" {
     var query = Query(&.{.Health, .Attack}).init(allocator, &pool_manager);
     defer query.deinit();
     try query.cacheArchetypesFromPools();
+}
+
+test "Next" {
+    const allocator = testing.allocator;
+    var pool_manager = PR.PoolManager().init(allocator);
+
+    var entity_manager = try EM.EntityManager.init(allocator);
+    defer {
+        pool_manager.deinit();
+        entity_manager.deinit();
+    }
+
+    const enemy_pool = try pool_manager.getOrCreatePool(.EnemyPool);
+    var enemy_interface = enemy_pool.getInterface(&entity_manager);
+    
+    const player_pool = try pool_manager.getOrCreatePool(.PlayerPool);
+    var player_interface = player_pool.getInterface(&entity_manager);
+
+    for(0..5) |_|{
+        _ = try enemy_interface.createEntity(.{
+            .Position = CR.Position{.x = 10, .y = 15},
+        });
+    }
+
+    for(0..5) |_|{
+        _ = try enemy_interface.createEntity(.{
+            .Position = CR.Position{.x = 10, .y = 15},
+            .Health = CR.Health{.current = 100, .max = 100},
+        });
+    }
+
+    for(0..5) |_|{
+        _ = try enemy_interface.createEntity(.{
+            .Position = CR.Position{.x = 10, .y = 15},
+            .Health = CR.Health{.current = 100, .max = 100},
+            .Attack = CR.Attack{.damage = 50, .crit_chance = 10},
+            .Velocity = CR.Velocity{.dx = 0, .dy = 1},
+        });
+    }
+
+    for(0..5) |_|{
+        _ = try player_interface.createEntity(.{
+            .Position = CR.Position{.x = 5, .y = 5},
+            .Health = CR.Health{.max = 50, .current = 25},
+        });
+    }
+
+    for(0..5) |_|{
+        _ = try player_interface.createEntity(.{
+            .Position = CR.Position{.x = 10, .y = 15},
+            .AI = CR.AI{.state = 5, .target_id = 0},
+        });
+    }
+
+    for(0..5) |_|{
+        _ = try player_interface.createEntity(.{
+            .Position = CR.Position{.x = 10, .y = 15},
+            .AI = CR.AI{.state = 5, .target_id = 0},
+            .Attack = CR.Attack{.damage = 50, .crit_chance = 10},
+        });
+    }
+    var query = Query(&.{.Position, .Velocity}).init(allocator, &pool_manager);
+    defer query.deinit();
+    try query.cacheArchetypesFromPools();
+
+    while(query.next()) |batch|{
+        for(batch.Position, batch.Velocity) |*pos, vel| {
+            pos.x += vel.dx;
+            pos.y += vel.dy;
+        } 
+    }
+
+    while(query.next()) |batch|{
+        for(batch.Position) |pos| {
+            std.debug.print("\nX:{} | Y:{}", .{pos.x, pos.y});
+        }
+    }
 }

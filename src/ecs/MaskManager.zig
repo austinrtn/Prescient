@@ -34,12 +34,9 @@ pub fn MaskManager(comptime COMPONENTS: []const CR.ComponentName) type {
             }
 
             pub fn componentToBit(comptime component: CR.ComponentName) Mask {
-                inline for(COMPONENTS, 0..) |comp, bit_pos| {
-                    if(comp == component) {
-                        return @as(Mask, 1) << @intCast(bit_pos);
-                    } 
-                }
-                @compileError("Component " ++ @tagName(component) ++ " does not exist in this MaskManager / Pool");
+                // Use enum index directly as bit position
+                const bit_pos = @intFromEnum(component);
+                return @as(Mask, 1) << @intCast(bit_pos);
             }
 
             pub fn addComponent(mask: Mask, comptime component: CR.ComponentName) Mask {
@@ -61,12 +58,9 @@ pub fn MaskManager(comptime COMPONENTS: []const CR.ComponentName) type {
             }
 
             pub fn componentToBit(component: CR.ComponentName) Mask {
-                inline for(COMPONENTS, 0..) |comp, bit_pos| {
-                    if(comp == component) {
-                        return @as(Mask, 1) << @intCast(bit_pos);
-                    }
-                } 
-                unreachable;
+                // Use enum index directly as bit position
+                const bit_pos = @intFromEnum(component);
+                return @as(Mask, 1) << @intCast(bit_pos);
             }
 
             pub fn addComponent(mask: Mask, component: CR.ComponentName) Mask {

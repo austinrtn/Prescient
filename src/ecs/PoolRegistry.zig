@@ -17,7 +17,7 @@ pub const EnemyPool = ArchPool.ArchetypePool(&.{}, &.{.Position, .Velocity, .Att
 /// Player entities - must have a position
 /// Required: Position
 /// Optional: Health, Attack, Sprite, Player
-pub const PlayerPool = ArchPool.ArchetypePool(&.{.Position}, &.{.Health, .Attack, .Sprite, .Player}, .PlayerPool);
+pub const PlayerPool = ArchPool.ArchetypePool(&.{.Position}, &.{.Health, .Attack, .Sprite, .Player, .AI}, .PlayerPool);
 
 /// Renderable entities that can be drawn to screen
 /// Required: Position, Sprite
