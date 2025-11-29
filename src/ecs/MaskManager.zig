@@ -5,7 +5,7 @@
 const std = @import("std");
 const CR = @import("ComponentRegistry.zig");
 
-pub fn MaskManager(comptime COMPONENTS: []const CR.ComponentName) type {
+pub fn MaskManagerType(comptime COMPONENTS: []const CR.ComponentName) type {
     const MaskType = comptime blk: {
         const len = (COMPONENTS.len);
 
@@ -74,4 +74,4 @@ pub fn MaskManager(comptime COMPONENTS: []const CR.ComponentName) type {
     };
 }
 
-pub const GlobalMaskManager = MaskManager(std.enums.values(CR.ComponentName));
+pub const GlobalMaskManager = MaskManagerType(std.enums.values(CR.ComponentName));

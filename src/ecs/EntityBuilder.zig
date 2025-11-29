@@ -17,7 +17,7 @@ const CR = @import("ComponentRegistry.zig");
 ///
 /// Example:
 /// ```zig
-/// const Builder = EntityBuilder(&.{.Position}, &.{.Health, .Velocity});
+/// const Builder = EntityBuilderType(&.{.Position}, &.{.Health, .Velocity});
 /// // Generates:
 /// // struct {
 /// //     Position: Position,           // Required - must provide
@@ -25,7 +25,7 @@ const CR = @import("ComponentRegistry.zig");
 /// //     Velocity: ?Velocity = null,   // Optional - can omit
 /// // }
 /// ```
-pub fn EntityBuilder(comptime required: []const CR.ComponentName, comptime optional: []const CR.ComponentName) type {
+pub fn EntityBuilderType(comptime required: []const CR.ComponentName, comptime optional: []const CR.ComponentName) type {
     return comptime blk: {
         var fields: [required.len + optional.len]std.builtin.Type.StructField = undefined;
         var idx: usize = 0;
@@ -70,11 +70,11 @@ pub fn EntityBuilder(comptime required: []const CR.ComponentName, comptime optio
     };
 }
 
-test "EntityBuilder with required and optional fields" {
+test "EntityBuilderType with required and optional fields" {
     const testing = std.testing;
 
     // Create a builder with Position required, Velocity and Health optional
-    const Builder = EntityBuilder(&.{.Position}, &.{.Velocity, .Health});
+    const Builder = EntityBuilderType(&.{.Position}, &.{.Velocity, .Health});
 
     // Test 1: Provide only required field
     const entity1: Builder = .{

@@ -32,7 +32,7 @@ pub const ComponentTypes = [_]type {
 };
 
 /// Convert a ComponentName to its corresponding type at compile time.
-pub fn getTypeByName(comptime componentName: ComponentName) type{
-    const index = @intFromEnum(componentName);
+pub fn getTypeByName(comptime component_name: ComponentName) type{
+    const index = @intFromEnum(component_name);
     return ComponentTypes[index];
 }

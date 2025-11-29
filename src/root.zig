@@ -6,8 +6,12 @@ test {
     _ = @import("ecs/ArchetypePool.zig");
     //_ = @import("ecs/ComponentRegistry.zig");
     _ = @import("ecs/PoolRegistry.zig");
+    _ = @import("ecs/PoolManager.zig");
     //_ = @import("ecs/ArchetypePool.zig");
     _ = @import("ecs/PoolInterface.zig");
     _ = @import("ecs/Query.zig");
+    //_ = @import("systems/MovementSystem.zig");
+    _ = @import("ecs/SystemManager.zig");
+    _ = @import("ecs/Prescient.zig");
 }
 

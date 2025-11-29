@@ -1,6 +1,7 @@
 const std = @import("std");
 const AP = @import("ArchetypePool.zig");
 const PR = @import("PoolRegistry.zig");
+const PM = @import("PoolManager.zig");
 const CR = @import("ComponentRegistry.zig");
 const MM = @import("MaskManager.zig");
 const testing = std.testing;
@@ -12,10 +13,10 @@ pub const PoolConfig = struct {
     opt: []const CR.ComponentName,
 };
 
-pub fn PoolInterface(comptime config: PoolConfig) type {
+pub fn PoolInterfaceType(comptime config: PoolConfig) type {
     return struct {
         const Self = @This();
-        const Pool = AP.ArchetypePool(config.req, config.opt, config.name);
+        const Pool = AP.ArchetypePoolType(config.req, config.opt, config.name);
 
         pool: *Pool,
         entity_manager: *EM.EntityManager,
@@ -46,7 +47,7 @@ pub fn PoolInterface(comptime config: PoolConfig) type {
 
         pub fn destroyEntity(self: *Self, entity: EM.Entity) !void {
             const entity_slot = try self.entity_manager.getSlot(entity);
-            const swapped_entity = try self.pool.remove_entity(entity_slot.mask_list_index, entity_slot.storage_index, entity_slot.pool_name);
+            const swapped_entity = try self.pool.removeEntity(entity_slot.mask_list_index, entity_slot.storage_index, entity_slot.pool_name);
 
             if(!std.meta.eql(entity_slot.getEntity(), swapped_entity)) {
                 const swapped_slot = try self.entity_manager.getSlot(swapped_entity);
@@ -113,13 +114,13 @@ pub fn PoolInterface(comptime config: PoolConfig) type {
 test "flush" {
     const allocator = testing.allocator;
     var entity_manager = try EM.EntityManager.init(allocator);
-    var pool_manager = PR.PoolManager().init(allocator);
+    var pool_manager = PM.PoolManager.init(allocator);
     const movement_pool = try pool_manager.getOrCreatePool(.MovementPool);
     defer {
         pool_manager.deinit();
         entity_manager.deinit();
     }
-    var interface = PoolInterface(PoolConfig{ .name = .MovementPool, .req = &.{}, .opt = &.{.Position, .Velocity}}).init(movement_pool, &entity_manager);
+    var interface = PoolInterfaceType(PoolConfig{ .name = .MovementPool, .req = &.{}, .opt = &.{.Position, .Velocity}}).init(movement_pool, &entity_manager);
 
     const ent = try interface.createEntity(.{.Position = CR.Position{.x = 3, .y = 4}});
     const slot = try interface.entity_manager.getSlot(ent);

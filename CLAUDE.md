@@ -28,3 +28,4 @@ The determination happens in a single loop for efficiency:
 - Check taskwarrior tasks to get a sense of what is currently being implememnted
 - I have no current plans for entities to be able to migrate into other pools.
 - When running test, you must call zig build test, because modules from other files won't load when calling individual tests
+- Cant use continue through inline loops

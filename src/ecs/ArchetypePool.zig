@@ -11,17 +11,35 @@ const CR = @import("ComponentRegistry.zig");
 const MM = @import("MaskManager.zig");
 const EM = @import("EntityManager.zig");
 const PR = @import("PoolRegistry.zig");
-const PoolInterface = @import("PoolInterface.zig").PoolInterface;
-const EntityBuilderFn = @import("EntityBuilder.zig").EntityBuilder;
+const PoolInterfaceType = @import("PoolInterface.zig").PoolInterfaceType;
+const EntityBuilderType = @import("EntityBuilder.zig").EntityBuilderType;
 const MaskManager = MM.GlobalMaskManager;
 
 const ArrayList = std.ArrayList;
 const Entity = EM.Entity;
 
-fn ComponentArrayStorage(comptime pool_components: []const CR.ComponentName) type {
-    var fields: [pool_components.len + 1]std.builtin.Type.StructField = undefined;
-
+fn ComponentArrayStorageType(comptime pool_components: []const CR.ComponentName) type {
+    var fields: [pool_components.len + 3]std.builtin.Type.StructField = undefined;
+    //~Field:index: usize
     fields[0] = std.builtin.Type.StructField{
+        .name = "index",
+        .type = usize,
+        .alignment = @alignOf(usize),
+        .default_value_ptr = null,
+        .is_comptime = false,
+    };
+
+    //~Field:reallocating: bool
+    fields[1] = std.builtin.Type.StructField{
+        .name = "reallocating",
+        .type = bool,
+        .alignment = @alignOf(bool),
+        .default_value_ptr = null,
+        .is_comptime = false,
+    };
+
+    //~Field:entities: AL(Entity)
+    fields[2] = std.builtin.Type.StructField{
         .name = "entities",
         .type = ArrayList(Entity),
         .alignment = @alignOf(ArrayList(Entity)),
@@ -29,7 +47,8 @@ fn ComponentArrayStorage(comptime pool_components: []const CR.ComponentName) typ
         .is_comptime = false,
     };
 
-    inline for(pool_components, 1..) |component, i| {
+    //~Field: CompDataList: AL(comp)
+    inline for(pool_components, 3..) |component, i| {
         const name = @tagName(component);
         const T = CR.getTypeByName(component);
         const archetype_storage = ?*ArrayList(T);
@@ -57,7 +76,7 @@ const MoveDirection = enum {
     removing,
 };
 
-fn MigrationEntry(comptime pool_components: []const CR.ComponentName, comptime Mask: type) type {
+fn MigrationEntryType(comptime pool_components: []const CR.ComponentName, comptime Mask: type) type {
     // Create enum fields for the migration tag type
     var enum_fields: [pool_components.len]std.builtin.Type.EnumField = undefined;
     inline for(pool_components, 0..) |component, i| {
@@ -118,13 +137,17 @@ const MigrationResult = struct {
     swapped_entity: ?Entity,
 };
 
-pub fn ArchetypePool(comptime req: []const CR.ComponentName, comptime opt: []const CR.ComponentName, comptime name: PR.PoolName) type {
+pub fn ArchetypePoolType(
+    comptime req: []const CR.ComponentName, 
+    comptime opt: []const CR.ComponentName, 
+    comptime name: PR.PoolName
+    ) type {
     const pool_components = req ++ opt;
 
     const POOL_MASK = comptime MaskManager.Comptime.createMask(pool_components);
 
-    const archetype_storage = ComponentArrayStorage(pool_components);
-    const MigrationEntryType = comptime MigrationEntry(pool_components, MaskManager.Mask);
+    const archetype_storage = ComponentArrayStorageType(pool_components);
+    const MigrationEntry = comptime MigrationEntryType(pool_components, MaskManager.Mask);
 
     return struct {
         const Self = @This();
@@ -142,14 +165,14 @@ pub fn ArchetypePool(comptime req: []const CR.ComponentName, comptime opt: []con
         /// EntityBuilder type for creating entities in this pool
         /// Required components are non-optional fields
         /// Optional components are nullable fields with null defaults
-        pub const Builder = EntityBuilderFn(req, opt);
+        pub const Builder = EntityBuilderType(req, opt);
 
         pool_is_dirty: bool = false,
         allocator: std.mem.Allocator,
         archetype_list: ArrayList(archetype_storage),
         mask_list: ArrayList(MaskManager.Mask),
 
-        migration_map: std.AutoHashMap(Entity, ArrayList(MigrationEntryType)),
+        migration_map: std.AutoHashMap(Entity, ArrayList(MigrationEntry)),
         new_archetypes: ArrayList(usize),
         reallocated_archetypes: ArrayList(usize), 
 
@@ -158,7 +181,7 @@ pub fn ArchetypePool(comptime req: []const CR.ComponentName, comptime opt: []con
                 .allocator = allocator,
                 .archetype_list = ArrayList(archetype_storage){},
                 .mask_list = ArrayList(MaskManager.Mask){},
-                .migration_map = std.AutoHashMap(Entity, ArrayList(MigrationEntryType)).init(allocator),
+                .migration_map = std.AutoHashMap(Entity, ArrayList(MigrationEntry)).init(allocator),
                 .new_archetypes = ArrayList(usize){},
                 .reallocated_archetypes = ArrayList(usize){},
             };
@@ -166,36 +189,41 @@ pub fn ArchetypePool(comptime req: []const CR.ComponentName, comptime opt: []con
             return self;
         }
 
-        pub fn getInterface(self: *Self, entity_manager: *EM.EntityManager) PoolInterface(.{.req = req, .opt = opt, .name = NAME}) {
-            return PoolInterface(.{.req = req, .opt = opt, .name = NAME}).init(self, entity_manager);
+        pub fn getInterface(self: *Self, entity_manager: *EM.EntityManager) PoolInterfaceType(.{.req = req, .opt = opt, .name = NAME}) {
+            return PoolInterfaceType(.{.req = req, .opt = opt, .name = NAME}).init(self, entity_manager);
         }
 
-        fn initArchetype(allocator: std.mem.Allocator, mask: MaskManager.Mask) !archetype_storage {
+        fn initArchetype(allocator: std.mem.Allocator, archetype_index: usize, mask: MaskManager.Mask) !archetype_storage {
             var archetype: archetype_storage = undefined;
-            inline for(@typeInfo(archetype_storage).@"struct".fields) |field| {
-                if(comptime std.mem.eql(u8, "entities", field.name)) {
-                    @field(archetype, field.name) = ArrayList(Entity){};
-                } else {
-                    const component_name = comptime std.meta.stringToEnum(CR.ComponentName, field.name).?;
-                    const field_bit = comptime MaskManager.Comptime.componentToBit(component_name);
+            archetype.index = archetype_index;
+            archetype.reallocating = false;
+            archetype.entities = ArrayList(Entity){};
 
-                    if(MaskManager.maskContains(mask, field_bit)) {
-                        const T = CR.getTypeByName(component_name);
-                        const array_list_ptr = try allocator.create(ArrayList(T));
-                        array_list_ptr.* = ArrayList(T){};
-                        @field(archetype, field.name) = array_list_ptr;
-                    }
-                    else {
-                        @field(archetype, field.name) = null;
-                    }
+            inline for(pool_components) |component_name| {
+                const field_bit = comptime MaskManager.Comptime.componentToBit(component_name);
+                const field_name = @tagName(component_name);
+
+                if(MaskManager.maskContains(mask, field_bit)) {
+                    const T = CR.getTypeByName(component_name);
+                    const array_list_ptr = try allocator.create(ArrayList(T));
+                    array_list_ptr.* = ArrayList(T){};
+                    @field(archetype, field_name) = array_list_ptr;
+                }
+                else {
+                    @field(archetype, field_name) = null;
                 }
             }
             return archetype;
         }
 
-        fn setArchetypeComponent(allocator: std.mem.Allocator, archetype: *archetype_storage, comptime component: CR.ComponentName, data: CR.getTypeByName(component)) !void{
+        fn setArchetypeComponent(self: *Self, archetype: *archetype_storage, comptime component: CR.ComponentName, data: CR.getTypeByName(component)) !void{
             var component_array_ptr = @field(archetype.*, @tagName(component)).?;
-            try component_array_ptr.append(allocator, data);
+            if(component_array_ptr.items.len + 1 > component_array_ptr.items.len and !archetype.reallocating){
+                archetype.reallocating = true;
+                self.pool_is_dirty = true;
+                try self.reallocated_archetypes.append(self.allocator, archetype.index);
+            }
+            try component_array_ptr.append(self.allocator, data);
         }
 
         fn getArchetype(self: *Self, mask: MaskManager.Mask) ?usize {
@@ -212,12 +240,13 @@ pub fn ArchetypePool(comptime req: []const CR.ComponentName, comptime opt: []con
                 return index;
             }
             else {
-                const archetype = try initArchetype(self.allocator, mask);
+                const indx = self.archetype_list.items.len;
+                const archetype = try initArchetype(self.allocator, indx, mask);
                 try self.archetype_list.append(self.allocator, archetype);
                 try self.mask_list.append(self.allocator, mask);
 
-                const indx = self.archetype_list.items.len - 1;
                 try self.new_archetypes.append(self.allocator, indx);
+                self.pool_is_dirty = true;
                 return indx;
             }
         }
@@ -229,7 +258,8 @@ pub fn ArchetypePool(comptime req: []const CR.ComponentName, comptime opt: []con
         pub fn addEntity(self: *Self, entity: Entity, comptime component_data: Builder) !struct { storage_index: u32, archetype_index: u32 }{
             // Build list of non-null components and validate required components
             const components = comptime blk: {
-                var component_list: [pool_components.len]CR.ComponentName = undefined; var count: usize = 0;
+                var component_list: [pool_components.len]CR.ComponentName = undefined; 
+                var count: usize = 0;
 
                 // Check all Builder fields
                 // Note: Builder is generated from this pool's req + opt, so all fields are valid
@@ -296,7 +326,7 @@ pub fn ArchetypePool(comptime req: []const CR.ComponentName, comptime opt: []con
                     break :blk result;
                 };
 
-                try setArchetypeComponent(self.allocator, archetype, component, typed_data);
+                try self.setArchetypeComponent(archetype, component, typed_data);
             }
             return .{
                 .storage_index = @intCast(archetype.entities.items.len - 1),
@@ -304,8 +334,8 @@ pub fn ArchetypePool(comptime req: []const CR.ComponentName, comptime opt: []con
             };
         }
 
-        pub fn remove_entity(self: *Self, mask_list_index: u32,  archetype_index: u32, entity_pool: PR.PoolName) !Entity {
-            try validateEntityInPool(entity_pool);
+        pub fn removeEntity(self: *Self, mask_list_index: u32,  archetype_index: u32, pool_name: PR.PoolName) !Entity {
+            try validateEntityInPool(pool_name);
             const mask_list_idx: usize = @intCast(mask_list_index);
             const entity_mask = self.mask_list[mask_list_idx];
             var archetype = &self.archetype_list.items[mask_list_idx];
@@ -313,19 +343,16 @@ pub fn ArchetypePool(comptime req: []const CR.ComponentName, comptime opt: []con
             const swapped_entity = archetype.entities.items[archetype.entities.items.len - 1];
             _ = archetype.entities.swapRemove(archetype_index);
 
-            inline for(@typeInfo(archetype_storage).@"struct".fields) |field| {
-                if(!comptime std.mem.eql(u8, "entities", field.name)) {
-                    // Get component bit at comptime
-                    const component_name = comptime std.meta.stringToEnum(CR.ComponentName, field.name).?;
-                    const field_bit = comptime MaskManager.Comptime.componentToBit(component_name);
+            inline for(pool_components) |component_name| {
+                const field_bit = comptime MaskManager.Comptime.componentToBit(component_name);
+                const field_name = @tagName(component_name);
 
-                    // Only process if this component exists in the entity's mask
-                    if (MaskManager.maskContains(entity_mask, field_bit)) {
-                        const component_array = &@field(archetype, field.name);
-                        if(component_array.* != null)  {
-                            var comp_array = component_array.*.?;
-                            _ = comp_array.swapRemove(archetype_index);
-                        }
+                // Only process if this component exists in the entity's mask
+                if (MaskManager.maskContains(entity_mask, field_bit)) {
+                    const component_array = &@field(archetype, field_name);
+                    if(component_array.* != null)  {
+                        var comp_array = component_array.*.?;
+                        _ = comp_array.swapRemove(archetype_index);
                     }
                 }
             }
@@ -336,11 +363,11 @@ pub fn ArchetypePool(comptime req: []const CR.ComponentName, comptime opt: []con
             self: *Self,
             mask_list_index: u32,
             storage_index: u32,
-            entity_pool: PR.PoolName,
+            pool_name: PR.PoolName,
             comptime component: CR.ComponentName) !*CR.getTypeByName(component) {
 
             validateComponentInPool(component);
-            try validateEntityInPool(entity_pool);
+            try validateEntityInPool(pool_name);
 
             const mask_list_idx: usize = @intCast(mask_list_index);
             const entity_mask = self.mask_list[mask_list_idx];
@@ -394,7 +421,7 @@ pub fn ArchetypePool(comptime req: []const CR.ComponentName, comptime opt: []con
                 const new_mask = MaskManager.Runtime.addComponent(entity_mask, component);
                 if(MaskManager.maskContains(entity_mask, component_bit)) { return error.AddingExistingComponent; }
 
-                const migration = MigrationEntryType {
+                const migration = MigrationEntry {
                     .entity = entity,
                     .archetype_index = archetype_index,
                     .old_mask = entity_mask,
@@ -402,7 +429,7 @@ pub fn ArchetypePool(comptime req: []const CR.ComponentName, comptime opt: []con
                     .direction = .adding,
                     .component_mask = component_bit,
                     .component_data = @unionInit(
-                        MigrationEntryType.ComponentDataUnion,
+                        MigrationEntry.ComponentDataUnion,
                         @tagName(component),
                         data
                     ),
@@ -414,7 +441,7 @@ pub fn ArchetypePool(comptime req: []const CR.ComponentName, comptime opt: []con
                     try entry_list.append(self.allocator, migration);
                 } else {
                     // First migration for this entity - create new list
-                    var list = ArrayList(MigrationEntryType){};
+                    var list = ArrayList(MigrationEntry){};
                     try list.append(self.allocator, migration);
                     try self.migration_map.put(entity, list);
                 }
@@ -424,7 +451,7 @@ pub fn ArchetypePool(comptime req: []const CR.ComponentName, comptime opt: []con
                 const new_mask = MaskManager.Runtime.removeComponent(entity_mask, component);
                 if(!MaskManager.maskContains(entity_mask, component_bit)) { return error.RemovingNonexistingComponent; }
 
-                const migration = MigrationEntryType {
+                const migration = MigrationEntry {
                     .entity = entity,
                     .archetype_index = archetype_index,
                     .old_mask = entity_mask,
@@ -432,7 +459,7 @@ pub fn ArchetypePool(comptime req: []const CR.ComponentName, comptime opt: []con
                     .direction = .removing,
                     .component_mask = component_bit,
                     .component_data = @unionInit(
-                        MigrationEntryType.ComponentDataUnion,
+                        MigrationEntry.ComponentDataUnion,
                         @tagName(component),
                         data
                     ),
@@ -444,7 +471,7 @@ pub fn ArchetypePool(comptime req: []const CR.ComponentName, comptime opt: []con
                     try entry_list.append(self.allocator, migration);
                 } else {
                     // First migration for this entity - create new list
-                    var list = ArrayList(MigrationEntryType){};
+                    var list = ArrayList(MigrationEntry){};
                     try list.append(self.allocator, migration);
                     try self.migration_map.put(entity, list);
                 }
@@ -540,32 +567,29 @@ pub fn ArchetypePool(comptime req: []const CR.ComponentName, comptime opt: []con
             // Remove entity from source archetype
             _ = src_archetype.entities.swapRemove(archetype_index);
 
-            inline for(@typeInfo(archetype_storage).@"struct".fields) |field| {
-                if(!comptime std.mem.eql(u8, "entities", field.name)) {
-                    // Get component bit at comptime
-                    const component_name = comptime std.meta.stringToEnum(CR.ComponentName, field.name).?;
-                    const field_bit = comptime MaskManager.Comptime.componentToBit(component_name);
+            inline for(pool_components) |component_name| {
+                const field_bit = comptime MaskManager.Comptime.componentToBit(component_name);
+                const field_name = @tagName(component_name);
 
-                    const in_old = MaskManager.maskContains(old_mask, field_bit);
-                    const in_new = MaskManager.maskContains(new_mask, field_bit);
+                const in_old = MaskManager.maskContains(old_mask, field_bit);
+                const in_new = MaskManager.maskContains(new_mask, field_bit);
 
-                    if (in_old and in_new) {
-                        // Component exists in both - copy it over
-                        var dest_array_ptr = @field(dest_archetype, field.name).?;
-                        var src_array_ptr = @field(src_archetype, field.name).?;
-                        try dest_array_ptr.append(allocator, src_array_ptr.items[archetype_index]);
-                        _ = src_array_ptr.swapRemove(archetype_index);
-                    } else if (in_new and !in_old) {
-                        // New component being added - allocate undefined, will be set in step 3
-                        var dest_array_ptr = @field(dest_archetype, field.name).?;
-                        try dest_array_ptr.append(allocator, undefined);
-                    } else if (in_old and !in_new) {
-                        // Component being removed - just remove from source
-                        var src_array_ptr = @field(src_archetype, field.name).?;
-                        _ = src_array_ptr.swapRemove(archetype_index);
-                    }
-                    // !in_old and !in_new - component not relevant, skip
+                if (in_old and in_new) {
+                    // Component exists in both - copy it over
+                    var dest_array_ptr = @field(dest_archetype, field_name).?;
+                    var src_array_ptr = @field(src_archetype, field_name).?;
+                    try dest_array_ptr.append(allocator, src_array_ptr.items[archetype_index]);
+                    _ = src_array_ptr.swapRemove(archetype_index);
+                } else if (in_new and !in_old) {
+                    // New component being added - allocate undefined, will be set in step 3
+                    var dest_array_ptr = @field(dest_archetype, field_name).?;
+                    try dest_array_ptr.append(allocator, undefined);
+                } else if (in_old and !in_new) {
+                    // Component being removed - just remove from source
+                    var src_array_ptr = @field(src_archetype, field_name).?;
+                    _ = src_array_ptr.swapRemove(archetype_index);
                 }
+                // !in_old and !in_new - component not relevant, skip
             }
             return .{
                 .archetype_index = new_archetype_index,
@@ -573,18 +597,28 @@ pub fn ArchetypePool(comptime req: []const CR.ComponentName, comptime opt: []con
             };
         }
 
+        pub fn flushNewAndReallocatingLists(self: *Self) void {
+            if(!self.pool_is_dirty) return;
+
+            for(self.reallocated_archetypes.items) |arch_indx|{
+                 self.archetype_list.items[arch_indx].reallocating = false;
+            } 
+            self.new_archetypes.clearRetainingCapacity();
+            self.reallocated_archetypes.clearRetainingCapacity();
+            self.pool_is_dirty = false;
+        }
+
         pub fn deinit(self: *Self) void {
             // Clean up all archetypes
             for (self.archetype_list.items) |*archetype| {
-                inline for (@typeInfo(archetype_storage).@"struct".fields) |field| {
-                    if(comptime std.mem.eql(u8, field.name, "entities")) {
-                        @field(archetype.*, field.name).deinit(self.allocator);
-                    } else {
-                        // Field is ?*ArrayList(T)
-                        if (@field(archetype.*, field.name)) |array_ptr| {
-                            array_ptr.deinit(self.allocator);
-                            self.allocator.destroy(array_ptr);
-                        }
+                archetype.entities.deinit(self.allocator);
+
+                inline for (pool_components) |component_name| {
+                    const field_name = @tagName(component_name);
+                    //~Field:ComponentName:  ?*ArrayList(T)
+                    if (@field(archetype.*, field_name)) |array_ptr| {
+                        array_ptr.deinit(self.allocator);
+                        self.allocator.destroy(array_ptr);
                     }
                 }
             }
@@ -602,8 +636,8 @@ pub fn ArchetypePool(comptime req: []const CR.ComponentName, comptime opt: []con
             self.migration_map.deinit();
         }
 
-        fn checkIfEntInPool(entity_pool_name: PR.PoolName) bool {
-            return entity_pool_name == name;
+        fn checkIfEntInPool(pool_name: PR.PoolName) bool {
+            return pool_name == name;
         }
 
         fn validateAllRequiredComponents(comptime components: []const CR.ComponentName) void {
@@ -629,9 +663,9 @@ pub fn ArchetypePool(comptime req: []const CR.ComponentName, comptime opt: []con
             }
         }
 
-        fn validateEntityInPool(entity_pool_name: PR.PoolName) !void {
-            if(!checkIfEntInPool(entity_pool_name)){
-                std.debug.print("\nEntity assigned pool '{s}' does not match pool: {s}\n", .{@tagName(entity_pool_name), @tagName(name)});
+        fn validateEntityInPool(pool_name: PR.PoolName) !void {
+            if(!checkIfEntInPool(pool_name)){
+                std.debug.print("\nEntity assigned pool '{s}' does not match pool: {s}\n", .{@tagName(pool_name), @tagName(name)});
                 return error.EntityPoolMismatch;
             }
         }
@@ -656,7 +690,7 @@ pub fn ArchetypePool(comptime req: []const CR.ComponentName, comptime opt: []con
 test "flush" {
     const allocator = std.testing.allocator;
 
-    const Pool = ArchetypePool(&.{}, &.{.Position, .Velocity}, .MovementPool);
+    const Pool = ArchetypePoolType(&.{}, &.{.Position, .Velocity}, .MovementPool);
     var pool = try Pool.init(allocator);
     defer pool.deinit();
     const dummy_ent = Entity{.index = 0, .generation = 0};

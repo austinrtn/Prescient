@@ -3,6 +3,7 @@ const ArrayList = std.ArrayList;
 const testing = std.testing;
 const CR = @import("ComponentRegistry.zig");
 const PR = @import("PoolRegistry.zig");
+const PM = @import("PoolManager.zig");
 const MaskManager = @import("MaskManager.zig").GlobalMaskManager;
 const EM = @import("EntityManager.zig");
 const PoolInterface = @import("PoolInterface.zig");
@@ -16,7 +17,7 @@ const ArchetypeAccess = enum{
     Lookup,
 };
 
-fn ArchetypeCache(comptime components: []const CR.ComponentName) type {
+fn ArchetypeCacheType(comptime components: []const CR.ComponentName) type {
     var fields: [components.len]StructField = undefined;
     //~Field: CompName: []Component
     for(components, 0..) |comp, i| {
@@ -42,15 +43,10 @@ fn ArchetypeCache(comptime components: []const CR.ComponentName) type {
     });
 } 
 
-//const ArchetypeCache = struct {
-//  Position: []PositionComponent,
-//  Velocity: []VelocityComponent,
-//};
-
 fn PoolElementType(comptime components: []const CR.ComponentName) type {
     var fields: [4]StructField = undefined;
     const default_arch_list = comptime ArrayList(usize){};
-    const arch_cache_arraylist = comptime ArrayList(ArchetypeCache(components));
+    const arch_cache_arraylist = comptime ArrayList(ArchetypeCacheType(components));
     const arch_cache_default = comptime arch_cache_arraylist{};
 
     //~Field:pool_name: PoolName 
@@ -228,7 +224,7 @@ fn QueryStorage(comptime PoolElement: type, comptime found_pool_elements: anytyp
 //*************************************
 //
 
-pub fn Query(comptime components: []const CR.ComponentName) type {
+pub fn QueryType(comptime components: []const CR.ComponentName) type {
     const PoolElement = PoolElementType(components);
     const found_pool_elements = comptime findPoolElements(components);
     const POOL_COUNT = found_pool_elements.len;
@@ -242,13 +238,13 @@ pub fn Query(comptime components: []const CR.ComponentName) type {
         pub const MASK = MaskManager.Comptime.createMask(components);
 
         allocator: std.mem.Allocator,
-        pool_manager: *PR.PoolManager(),
+        pool_manager: *PM.PoolManager,
         query_storage: QStorageType = QStorage,
-        
+
         pool_index: usize = 0,
         archetype_index: usize = 0,
 
-        pub fn init(allocator: std.mem.Allocator, pool_manager: *PR.PoolManager()) Self {
+        pub fn init(allocator: std.mem.Allocator, pool_manager: *PM.PoolManager) Self {
             var self = Self{
                 .allocator = allocator,
                 .pool_manager = pool_manager,
@@ -258,7 +254,7 @@ pub fn Query(comptime components: []const CR.ComponentName) type {
             inline for(std.meta.fields(QStorageType)) |field| {
                 var pool_element = &@field(self.query_storage, field.name);
                 pool_element.archetype_indices = ArrayList(usize){};
-                pool_element.archetype_cache = ArrayList(ArchetypeCache(components)){};
+                pool_element.archetype_cache = ArrayList(ArchetypeCacheType(components)){};
             }
 
             return self;
@@ -278,15 +274,22 @@ pub fn Query(comptime components: []const CR.ComponentName) type {
                 switch (pool_element.pool_name) {
                     inline else => |pool_name|{
                         const pool = try self.pool_manager.getOrCreatePool(pool_name);
-                        for(pool.new_archetypes.items) |arch| {
-                            if(pool_element.access == .Direct) {
-                                try self.cache(pool_element, pool, arch);
-                            }
-                            else {
-                                const archetype_bitmask = pool.mask_list.items[arch];
-                                if(MaskManager.maskContains(archetype_bitmask, Self.MASK)){
-                                    try self.cache(pool_element, pool, arch);
+                        if(pool.pool_is_dirty){
+                            for(pool.new_archetypes.items) |arch| {
+                                if(pool_element.access == .Direct) {
+                                    try self.cache(pool_element, pool, arch, null);
                                 }
+                                else {
+                                    const archetype_bitmask = pool.mask_list.items[arch];
+                                    if(MaskManager.maskContains(archetype_bitmask, Self.MASK)){
+                                        try self.cache(pool_element, pool, arch, null);
+                                    }
+                                }
+                            }
+
+                            for(pool.reallocated_archetypes.items) |arch| {
+                                const i = std.mem.indexOfScalar(usize, pool_element.archetype_indices.items, arch) orelse continue;
+                                try self.cache(pool_element, pool, arch, i);
                             }
                         }
                     }
@@ -295,17 +298,14 @@ pub fn Query(comptime components: []const CR.ComponentName) type {
         }
 
         ///Convert archetype storage into Query Struct and append it to query cache
-        pub fn cache(self: *Self, pool_element: anytype, pool: anytype, archetype_index: usize) !void {
-            const ArchCacheType = comptime ArchetypeCache(components);
+        pub fn cache(self: *Self, pool_element: anytype, pool: anytype, archetype_index: usize, index_in_pool_elem: ?usize) !void {
+            const ArchCacheType = comptime ArchetypeCacheType(components);
             const storage = &pool.archetype_list.items[archetype_index];
-
-            // Add archetype index to the list
-            try pool_element.archetype_indices.append(self.allocator, archetype_index);
 
             // Iterate over component fields in the PoolElement type
             var archetype_cache:ArchCacheType = undefined;
             inline for(std.meta.fields(ArchCacheType)) |field| {
-            // Only process component fields (skip metadata fields)
+                // Only process component fields (skip metadata fields)
                 // Only cache if this component exists in the archetype storage
                 if (@hasField(@TypeOf(storage.*), field.name)) {
                     const slice = @field(storage, field.name).?.items;
@@ -313,43 +313,18 @@ pub fn Query(comptime components: []const CR.ComponentName) type {
                 }
             }
 
-            try pool_element.archetype_cache.append(self.allocator, archetype_cache);
+            if(index_in_pool_elem) |indx|{
+                // Re-caching existing archetype - just update the cache
+                pool_element.archetype_cache.items[indx] = archetype_cache;
+            }
+            else{
+                // New archetype - add to both lists
+                try pool_element.archetype_indices.append(self.allocator, archetype_index);
+                try pool_element.archetype_cache.append(self.allocator, archetype_cache);
+            }
         }
 
-        //Check each pool to see which archetypes match the query
-        // pub fn update(self: *Self) !void{
-        //     var archetypes_list: ArrayList(MaskManager.Mask) = .{};
-        //
-        //     inline for(PR.pool_types, 0..) |_, i| {
-        //         const pool_name: PR.PoolName = @enumFromInt(i);
-        //         const pool_field = @tagName(pool_name);
-        //         
-        //         if(@hasField(@TypeOf(self.pool_storage), pool_field)) {
-        //             const pool_element = @field(self.pool_storage, pool_field);
-        //             const pool_instance = try self.pool_manager.getOrCreatePool(pool_name);
-        //
-        //             if(pool_element.access == .Direct) {
-        //                 try archetypes_list.appendSlice(self.allocator, pool_instance.mask_list.items);
-        //             }
-        //             else if(pool_element.access == .Lookup) {
-        //                 for(pool_instance.mask_list.items) |archetype_mask|{
-        //                     var has_components: bool = true;
-        //                     inline for(components) |component|{
-        //                         const bit = MaskManager.Comptime.componentToBit(component);
-        //                         if(!MaskManager.maskContains(archetype_mask, bit)) {
-        //                             has_components = false;
-        //                             break;
-        //                         }
-        //                     }
-        //                     if(has_components) try archetypes_list.append(self.allocator, archetype_mask);
-        //                 }
-        //             }
-        //         }
-        //     } 
-        //     self.cached_archetypes = archetypes_list;
-        // }
-        //
-        pub fn next(self: *Self) ?ArchetypeCache(components){
+        pub fn next(self: *Self) ?ArchetypeCacheType(components){
             while(true){
                 switch(self.pool_index){
                     inline 0...(pool_count - 1) =>|i|{
@@ -372,6 +347,7 @@ pub fn Query(comptime components: []const CR.ComponentName) type {
                             if(self.pool_index >= POOL_COUNT) {
                                 self.archetype_index = 0;
                                 self.pool_index = 0;
+
                                 return null;
                             }
                         }
@@ -382,15 +358,14 @@ pub fn Query(comptime components: []const CR.ComponentName) type {
         }
     };
 }
-
 test "Compile" {
-    const query = Query(&.{.Position, .Attack});
+    const query = QueryType(&.{.Position, .Attack});
     _= query;
 }
 
 test "Basic Query" {
     const allocator = testing.allocator;
-    var pool_manager = PR.PoolManager().init(allocator);
+    var pool_manager = PM.PoolManager.init(allocator);
 
     var entity_manager = try EM.EntityManager.init(allocator);
     defer {
@@ -412,14 +387,14 @@ test "Basic Query" {
     });
     _ = ent2;
 
-    var query = Query(&.{.Health, .Attack}).init(allocator, &pool_manager);
+    var query = QueryType(&.{.Health, .Attack}).init(allocator, &pool_manager);
     defer query.deinit();
     try query.cacheArchetypesFromPools();
 }
 
 test "Next" {
     const allocator = testing.allocator;
-    var pool_manager = PR.PoolManager().init(allocator);
+    var pool_manager = PM.PoolManager.init(allocator);
 
     var entity_manager = try EM.EntityManager.init(allocator);
     defer {
@@ -432,21 +407,22 @@ test "Next" {
     
     const player_pool = try pool_manager.getOrCreatePool(.PlayerPool);
     var player_interface = player_pool.getInterface(&entity_manager);
+    const ents_per_arch = 1;
 
-    for(0..5) |_|{
+    for(0..ents_per_arch) |_|{
         _ = try enemy_interface.createEntity(.{
             .Position = CR.Position{.x = 10, .y = 15},
         });
     }
 
-    for(0..5) |_|{
+    for(0..ents_per_arch) |_|{
         _ = try enemy_interface.createEntity(.{
             .Position = CR.Position{.x = 10, .y = 15},
             .Health = CR.Health{.current = 100, .max = 100},
         });
     }
 
-    for(0..5) |_|{
+    for(0..ents_per_arch) |_|{
         _ = try enemy_interface.createEntity(.{
             .Position = CR.Position{.x = 10, .y = 15},
             .Health = CR.Health{.current = 100, .max = 100},
@@ -455,28 +431,28 @@ test "Next" {
         });
     }
 
-    for(0..5) |_|{
+    for(0..ents_per_arch) |_|{
         _ = try player_interface.createEntity(.{
             .Position = CR.Position{.x = 5, .y = 5},
             .Health = CR.Health{.max = 50, .current = 25},
         });
     }
 
-    for(0..5) |_|{
+    for(0..ents_per_arch) |_|{
         _ = try player_interface.createEntity(.{
             .Position = CR.Position{.x = 10, .y = 15},
             .AI = CR.AI{.state = 5, .target_id = 0},
         });
     }
 
-    for(0..5) |_|{
+    for(0..ents_per_arch) |_|{
         _ = try player_interface.createEntity(.{
             .Position = CR.Position{.x = 10, .y = 15},
             .AI = CR.AI{.state = 5, .target_id = 0},
             .Attack = CR.Attack{.damage = 50, .crit_chance = 10},
         });
     }
-    var query = Query(&.{.Position, .Velocity}).init(allocator, &pool_manager);
+    var query = QueryType(&.{.Position, .Velocity}).init(allocator, &pool_manager);
     defer query.deinit();
     try query.cacheArchetypesFromPools();
 
@@ -489,7 +465,7 @@ test "Next" {
 
     while(query.next()) |batch|{
         for(batch.Position) |pos| {
-            std.debug.print("\nX:{} | Y:{}", .{pos.x, pos.y});
+            try testing.expect(pos.y == 16);
         }
     }
 }
