@@ -137,11 +137,16 @@ const MigrationResult = struct {
     swapped_entity: ?Entity,
 };
 
-pub fn ArchetypePoolType(
-    comptime req: []const CR.ComponentName, 
-    comptime opt: []const CR.ComponentName, 
-    comptime name: PR.PoolName
-    ) type {
+pub const PoolConfig = struct {
+    name: PR.PoolName,
+    req: []const CR.ComponentName,
+    opt: []const CR.ComponentName,
+};
+
+pub fn ArchetypePoolType(comptime config: PoolConfig) type {
+    const req = config.req;
+    const opt = config.opt;
+    const name = config.name;
     const pool_components = req ++ opt;
 
     const POOL_MASK = comptime MaskManager.Comptime.createMask(pool_components);
@@ -178,6 +183,7 @@ pub fn ArchetypePoolType(
 
         pub fn init(allocator: std.mem.Allocator) !Self {
             const self: Self = .{
+                .pool_is_dirty = false,
                 .allocator = allocator,
                 .archetype_list = ArrayList(archetype_storage){},
                 .mask_list = ArrayList(MaskManager.Mask){},
@@ -189,8 +195,8 @@ pub fn ArchetypePoolType(
             return self;
         }
 
-        pub fn getInterface(self: *Self, entity_manager: *EM.EntityManager) PoolInterfaceType(.{.req = req, .opt = opt, .name = NAME}) {
-            return PoolInterfaceType(.{.req = req, .opt = opt, .name = NAME}).init(self, entity_manager);
+        pub fn getInterface(self: *Self, entity_manager: *EM.EntityManager) PoolInterfaceType(NAME) {
+            return PoolInterfaceType(NAME).init(self, entity_manager);
         }
 
         fn initArchetype(allocator: std.mem.Allocator, archetype_index: usize, mask: MaskManager.Mask) !archetype_storage {
@@ -370,7 +376,7 @@ pub fn ArchetypePoolType(
             try validateEntityInPool(pool_name);
 
             const mask_list_idx: usize = @intCast(mask_list_index);
-            const entity_mask = self.mask_list[mask_list_idx];
+            const entity_mask = self.mask_list.items[mask_list_idx];
             const archetype = &self.archetype_list.items[mask_list_idx];
 
             try validateComponentInArchetype(entity_mask, component);
@@ -690,7 +696,11 @@ pub fn ArchetypePoolType(
 test "flush" {
     const allocator = std.testing.allocator;
 
-    const Pool = ArchetypePoolType(&.{}, &.{.Position, .Velocity}, .MovementPool);
+    const Pool = ArchetypePoolType(.{
+        .name = .MovementPool,
+        .req = &.{},
+        .opt = &.{.Position, .Velocity}
+    });
     var pool = try Pool.init(allocator);
     defer pool.deinit();
     const dummy_ent = Entity{.index = 0, .generation = 0};

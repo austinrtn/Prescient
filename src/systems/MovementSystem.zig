@@ -61,11 +61,7 @@ pub const MovementSystem = struct {
 //     defer pool_manager.deinit();
 //     const movement_pool = try pool_manager.getOrCreatePool(.MovementPool);
 //
-//     var interface = Interface(.{
-//         .opt = &.{.Position, .Velocity}, 
-//         .req = &.{}, 
-//         .name = .MovementPool
-//     }).init(movement_pool, &ent_manager);
+//     var interface = Interface(.MovementPool).init(movement_pool, &ent_manager);
 //
 //     _ = try interface.createEntity(.{.Position = .{.x = 0, .y = 0}, .Velocity = .{.dx = 1, .dy = 0}});
 //

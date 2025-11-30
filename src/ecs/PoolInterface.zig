@@ -7,16 +7,10 @@ const MM = @import("MaskManager.zig");
 const testing = std.testing;
 const EM = @import("EntityManager.zig");
 
-pub const PoolConfig = struct {
-    name: PR.PoolName,
-    req: []const CR.ComponentName,
-    opt: []const CR.ComponentName,
-};
-
-pub fn PoolInterfaceType(comptime config: PoolConfig) type {
+pub fn PoolInterfaceType(comptime pool_name: PR.PoolName) type {
     return struct {
         const Self = @This();
-        const Pool = AP.ArchetypePoolType(config.req, config.opt, config.name);
+        const Pool = PR.getPoolFromName(pool_name);
 
         pool: *Pool,
         entity_manager: *EM.EntityManager,
@@ -120,7 +114,7 @@ test "flush" {
         pool_manager.deinit();
         entity_manager.deinit();
     }
-    var interface = PoolInterfaceType(PoolConfig{ .name = .MovementPool, .req = &.{}, .opt = &.{.Position, .Velocity}}).init(movement_pool, &entity_manager);
+    var interface = PoolInterfaceType(.MovementPool).init(movement_pool, &entity_manager);
 
     const ent = try interface.createEntity(.{.Position = CR.Position{.x = 3, .y = 4}});
     const slot = try interface.entity_manager.getSlot(ent);

@@ -8,7 +8,7 @@ const SystemManagerStorage = blk: {
 
     for(system_names, 0..) |system, i| {
         const name = @tagName(system);
-        const T = *SR.getTypeByName(system);
+        const T = SR.getTypeByName(system);
 
         fields[i] = std.builtin.Type.StructField{
             .name = name,
@@ -43,8 +43,8 @@ pub const SystemManager = struct {
         self.pool_manager = pool_manager;
 
         var storage: SystemManagerStorage = undefined;
-        inline for(std.meta.fields(SystemManagerStorage)) |field| {
-            @field(storage, field.name) = null;
+        inline for(std.meta.tags(SR.SystemName)) |system| {
+            @field(storage, @tagName(system)) = SR.getTypeByName(system).init(allocator, pool_manager);
         }
         self.storage = storage;
 
@@ -53,27 +53,19 @@ pub const SystemManager = struct {
 
     pub fn deinit(self: *Self) void {
         inline for(std.meta.fields(SystemManagerStorage)) |field| {
-            if (@field(self.storage, field.name)) |system| {
-                system.deinit();
-                self.allocator.destroy(system);
-            }
+            @field(self.storage, field.name).deinit();
+            
         }
     }
 
-    pub fn getSystem(self: *Self, comptime system: SR.SystemName) !*SR.getTypeByName(system) {
-        switch(system) {
-            else => |sys| {
-                return @field(self.storage, @tagName(sys));
-            }
-        }
-        unreachable;
+    pub fn getSystem(self: *Self, comptime system: SR.SystemName) *SR.getTypeByName(system) {
+        const field_name = @tagName(system);
+        return &@field(self.storage, field_name);
     }
 
     pub fn update(self: *Self) !void {
         inline for(std.meta.fields(SystemManagerStorage)) |field| {
-            if (@field(self.storage, field.name)) |system| {
-                try system.update();
-            }
+            try @field(self.storage, field.name).update();
         }
     }
 };
@@ -88,7 +80,7 @@ test "SystemManager getSystem" {
     defer system_manager.deinit();
 
     // Get system first time - should create it
-    const movement = try system_manager.getOrCreateSystem(.Movement);
+    const movement = system_manager.getSystem(.Movement);
     _ = movement;
 
     for(0..5) |_|{
