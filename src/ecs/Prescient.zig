@@ -85,8 +85,8 @@ test "Basic" {
     var api = try Prescient.init(testing.allocator);
     defer api.deinit();
 
-    var interface = try api.getPool(.MovementPool);
-    _ = try interface.createEntity(.{
+    var pool = try api.getPool(.GeneralPool);
+    _ = try pool .createEntity(.{
         .Position = .{.x = 3, .y = 5},
         .Velocity = .{.dx = 1, .dy = 0},
     });
@@ -94,7 +94,5 @@ test "Basic" {
     for(0..5) |_| {
         try api.update();
     }
-
-    api.getSystem(.Movement).delta_time = 3;
 }
 

@@ -2,6 +2,13 @@ const std = @import("std");
 const cr = @import("ComponentRegistry.zig");
 const ArchPool = @import("ArchetypePool.zig");
 
+const general_components = std.meta.tags(cr.ComponentName);
+pub const GeneralPool = ArchPool.ArchetypePoolType(.{
+    .name = .GeneralPool,
+    .req = &.{},
+    .opt = general_components,
+});
+
 /// Basic movement pool for entities that can move
 /// Required: (none)
 /// Optional: Position, Velocity
@@ -48,6 +55,7 @@ pub const CombatPool = ArchPool.ArchetypePoolType(.{
 });
 
 pub const PoolName = enum(u32) {
+    GeneralPool,
     MovementPool,
     EnemyPool,
     PlayerPool,
@@ -56,6 +64,7 @@ pub const PoolName = enum(u32) {
 };
 
 pub const pool_types = [_]type{
+    GeneralPool,
     MovementPool,
     EnemyPool,
     PlayerPool,

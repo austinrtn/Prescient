@@ -264,19 +264,20 @@ pub fn ArchetypePoolType(comptime config: PoolConfig) type {
         pub fn addEntity(self: *Self, entity: Entity, comptime component_data: Builder) !struct { storage_index: u32, archetype_index: u32 }{
             // Build list of non-null components and validate required components
             const components = comptime blk: {
-                var component_list: [pool_components.len]CR.ComponentName = undefined; 
+                var component_list: [pool_components.len]CR.ComponentName = undefined;
                 var count: usize = 0;
 
-                // Check all Builder fields
+                // Check all pool components directly (no need for stringToEnum)
                 // Note: Builder is generated from this pool's req + opt, so all fields are valid
-                for (std.meta.fields(Builder)) |field| {
-                    const comp = std.meta.stringToEnum(CR.ComponentName, field.name) orelse {
-                        @compileError("Component not found in registry");
-                    };
+                for (pool_components) |comp| {
+                    const field_name = @tagName(comp);
+                    const field_info = for (std.meta.fields(Builder)) |f| {
+                        if (std.mem.eql(u8, f.name, field_name)) break f;
+                    } else @compileError("Component in pool not found in Builder");
 
                     // Check if this field is optional
-                    const is_optional = @typeInfo(field.type) == .optional;
-                    const field_value = @field(component_data, field.name);
+                    const is_optional = @typeInfo(field_info.type) == .optional;
+                    const field_value = @field(component_data, field_name);
 
                     // Include if: required field OR optional field with non-null value
                     const should_include = !is_optional or (field_value != null);
