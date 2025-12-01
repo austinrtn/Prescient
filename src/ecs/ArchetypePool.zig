@@ -139,13 +139,13 @@ const MigrationResult = struct {
 
 pub const PoolConfig = struct {
     name: PR.PoolName,
-    req: []const CR.ComponentName,
-    opt: []const CR.ComponentName,
+    req: ?[]const CR.ComponentName = null,
+    opt: ?[]const CR.ComponentName = null,
 };
 
 pub fn ArchetypePoolType(comptime config: PoolConfig) type {
-    const req = config.req;
-    const opt = config.opt;
+    const req = if(config.req) |req_comps| req_comps else &.{};
+    const opt = if(config.opt) |opt_comps| opt_comps else &.{};
     const name = config.name;
     const pool_components = req ++ opt;
 
@@ -490,6 +490,19 @@ pub fn ArchetypePoolType(comptime config: PoolConfig) type {
             var results = ArrayList(MigrationResult){};
             try results.ensureTotalCapacity(self.allocator, self.migration_map.count());
 
+            // Collect all migrations and sort by (old_mask, archetype_index DESC)
+            // This prevents swapRemove from invalidating indices of unprocessed entities
+            const MigrationWork = struct {
+                entity: Entity,
+                entries: ArrayList(MigrationEntry),
+                old_mask: MaskManager.Mask,
+                archetype_index: u32,
+            };
+
+            var work_items = ArrayList(MigrationWork){};
+            try work_items.ensureTotalCapacity(self.allocator, self.migration_map.count());
+            defer work_items.deinit(self.allocator);
+
             var iter = self.migration_map.iterator();
             while (iter.next()) |kv| {
                 const entity = kv.key_ptr.*;
@@ -497,10 +510,34 @@ pub fn ArchetypePoolType(comptime config: PoolConfig) type {
 
                 if (entries.items.len == 0) continue;
 
-                // Step 1: Resolve - compute final mask from all entries
                 const first_entry = entries.items[0];
-                const original_old_mask = first_entry.old_mask;
-                const original_archetype_index = first_entry.archetype_index;
+                try work_items.append(self.allocator, .{
+                    .entity = entity,
+                    .entries = entries,
+                    .old_mask = first_entry.old_mask,
+                    .archetype_index = first_entry.archetype_index,
+                });
+            }
+
+            // Sort: primary by old_mask, secondary by archetype_index descending
+            std.mem.sort(MigrationWork, work_items.items, {}, struct {
+                fn lessThan(_: void, a: MigrationWork, b: MigrationWork) bool {
+                    if (a.old_mask != b.old_mask) {
+                        return a.old_mask < b.old_mask;
+                    }
+                    // Reverse order for archetype_index (higher indices first)
+                    return a.archetype_index > b.archetype_index;
+                }
+            }.lessThan);
+
+            // Process migrations in sorted order
+            for (work_items.items) |*work| {
+                const entity = work.entity;
+                var entries = work.entries;
+                const original_old_mask = work.old_mask;
+                const original_archetype_index = work.archetype_index;
+
+                // Step 1: Resolve - compute final mask from all entries
 
                 var final_mask = original_old_mask;
                 for (entries.items) |entry| {
@@ -548,7 +585,7 @@ pub fn ArchetypePoolType(comptime config: PoolConfig) type {
                 });
 
                 // Clean up the entry list
-                kv.value_ptr.deinit(self.allocator);
+                entries.deinit(self.allocator);
             }
 
             self.migration_map.clearRetainingCapacity();
