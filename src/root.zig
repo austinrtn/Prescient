@@ -13,5 +13,6 @@ test {
     //_ = @import("systems/MovementSystem.zig");
     _ = @import("ecs/SystemManager.zig");
     _ = @import("ecs/Prescient.zig");
+    _ = @import("ecs/SparseSetPool.zig");
 }
 

@@ -5,7 +5,7 @@ const ArchPool = @import("ArchetypePool.zig");
 const general_components = std.meta.tags(cr.ComponentName);
 pub const GeneralPool = ArchPool.ArchetypePoolType(.{
     .name = .GeneralPool,
-    .req = &.{},
+    .req = null,
     .opt = general_components,
 });
 

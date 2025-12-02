@@ -107,7 +107,7 @@ fn MigrationEntryType(comptime pool_components: []const CR.ComponentName, compti
         };
     }
 
-    const CompDataUnion=  @Type(.{
+    const CompDataUnion = @Type(.{
         .@"union" = .{
             .fields = &fields,
             .layout = .auto,
@@ -146,8 +146,27 @@ pub const PoolConfig = struct {
 pub fn ArchetypePoolType(comptime config: PoolConfig) type {
     const req = if(config.req) |req_comps| req_comps else &.{};
     const opt = if(config.opt) |opt_comps| opt_comps else &.{};
+
+
+    const pool_components = comptime blk: {
+        if(req.len == 0 and opt.len == 0) {
+            @compileError("\nPool must contain at least one component!\n");
+        }
+
+        if(req.len == 0 and opt.len > 0) {
+            break :blk opt;
+        }
+
+        else if(req.len > 0 and opt.len == 0) {
+            break :blk req;
+        }
+
+        else {
+            break :blk req ++ opt;
+        }
+    };
+
     const name = config.name;
-    const pool_components = req ++ opt;
 
     const POOL_MASK = comptime MaskManager.Comptime.createMask(pool_components);
 
