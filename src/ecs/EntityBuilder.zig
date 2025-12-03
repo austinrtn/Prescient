@@ -70,6 +70,41 @@ pub fn EntityBuilderType(comptime required: []const CR.ComponentName, comptime o
     };
 }
 
+pub fn getComponentsFromData(comptime pool_components: []const CR.ComponentName, 
+    comptime builder: type, 
+    comptime component_data: builder) [] const CR.ComponentName {
+
+    const components = comptime blk: {
+        var component_list: [pool_components.len]CR.ComponentName = undefined;
+        var count: usize = 0;
+
+        // Check all pool components directly (no need for stringToEnum)
+        // Note: Builder is generated from this pool's req + opt, so all fields are valid
+        for (pool_components) |comp| {
+            const field_name = @tagName(comp);
+            const field_info = for (std.meta.fields(builder)) |f| {
+                if (std.mem.eql(u8, f.name, field_name)) break f;
+            } else @compileError("Component in pool not found in Builder");
+
+            // Check if this field is optional
+            const is_optional = @typeInfo(field_info.type) == .optional;
+            const field_value = @field(component_data, field_name);
+
+            // Include if: required field OR optional field with non-null value
+            const should_include = !is_optional or (field_value != null);
+
+            if (should_include) {
+                component_list[count] = comp;
+                count += 1;
+            }
+        }
+
+        break :blk component_list[0..count].*;
+    };
+
+    return &components;
+}
+
 test "EntityBuilderType with required and optional fields" {
     const testing = std.testing;
 
