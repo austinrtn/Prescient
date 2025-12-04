@@ -15,6 +15,9 @@ const PoolInterfaceType = @import("PoolInterface.zig").PoolInterfaceType;
 const EB = @import("EntityBuilder.zig");
 const EntityBuilderType = EB.EntityBuilderType;
 const MaskManager = MM.GlobalMaskManager;
+const MQ = @import("MigrationQueue.zig");
+const MoveDirection = MQ.MoveDirection;
+const MigrationResult = MQ.MigrationResult;
 
 const ArrayList = std.ArrayList;
 const Entity = EM.Entity;
@@ -72,71 +75,6 @@ fn ComponentArrayStorageType(comptime pool_components: []const CR.ComponentName)
         },
     });
 }
-const MoveDirection = enum {
-    adding,
-    removing,
-};
-
-fn MigrationEntryType(comptime pool_components: []const CR.ComponentName, comptime Mask: type) type {
-    // Create enum fields for the migration tag type
-    var enum_fields: [pool_components.len]std.builtin.Type.EnumField = undefined;
-    inline for(pool_components, 0..) |component, i| {
-        enum_fields[i] = .{
-            .name = @tagName(component),
-            .value = i,
-        };
-    }
-
-    const MigrationTag = @Type(.{
-        .@"enum" = .{
-            .tag_type = u32,
-            .fields = &enum_fields,
-            .decls = &.{},
-            .is_exhaustive = true,
-        },
-    });
-
-    // Create union fields
-    var fields: [pool_components.len]std.builtin.Type.UnionField = undefined;
-
-    inline for(pool_components, 0..) |component, i| {
-        const T = CR.getTypeByName(component);
-        fields[i] = std.builtin.Type.UnionField{
-            .name = @tagName(component),
-            .type = ?T,
-            .alignment = @alignOf(T),
-        };
-    }
-
-    const CompDataUnion = @Type(.{
-        .@"union" = .{
-            .fields = &fields,
-            .layout = .auto,
-            .decls = &.{},
-            .tag_type = MigrationTag,
-        }
-    });
-
-    return struct {
-        const Self = @This();
-        const ComponentDataUnion = CompDataUnion;
-
-        entity: Entity,
-        archetype_index: u32,
-        direction: MoveDirection,
-        old_mask: Mask,
-        new_mask: Mask,
-        component_mask: Mask,
-        component_data: ComponentDataUnion,
-    };
-}
-
-const MigrationResult = struct {
-    entity: Entity,
-    archetype_index: u32,
-    mask_list_index: u32,
-    swapped_entity: ?Entity,
-};
 
 pub const PoolConfig = struct {
     name: PR.PoolName,
@@ -172,7 +110,7 @@ pub fn ArchetypePoolType(comptime config: PoolConfig) type {
     const POOL_MASK = comptime MaskManager.Comptime.createMask(pool_components);
 
     const archetype_storage = ComponentArrayStorageType(pool_components);
-    const MigrationEntry = comptime MigrationEntryType(pool_components, MaskManager.Mask);
+    const MigrationQueue = MQ.MigrationQueueType(pool_components);
 
     return struct {
         const Self = @This();
@@ -197,7 +135,7 @@ pub fn ArchetypePoolType(comptime config: PoolConfig) type {
         archetype_list: ArrayList(archetype_storage),
         mask_list: ArrayList(MaskManager.Mask),
 
-        migration_map: std.AutoHashMap(Entity, ArrayList(MigrationEntry)),
+        migration_queue: MigrationQueue,
         new_archetypes: ArrayList(usize),
         reallocated_archetypes: ArrayList(usize), 
 
@@ -207,7 +145,7 @@ pub fn ArchetypePoolType(comptime config: PoolConfig) type {
                 .allocator = allocator,
                 .archetype_list = ArrayList(archetype_storage){},
                 .mask_list = ArrayList(MaskManager.Mask){},
-                .migration_map = std.AutoHashMap(Entity, ArrayList(MigrationEntry)).init(allocator),
+                .migration_queue = MigrationQueue.init(allocator),
                 .new_archetypes = ArrayList(usize){},
                 .reallocated_archetypes = ArrayList(usize){},
             };
@@ -422,82 +360,66 @@ pub fn ArchetypePoolType(comptime config: PoolConfig) type {
                 const new_mask = MaskManager.Runtime.addComponent(entity_mask, component);
                 if(MaskManager.maskContains(entity_mask, component_bit)) { return error.AddingExistingComponent; }
 
-                const migration = MigrationEntry {
-                    .entity = entity,
-                    .archetype_index = archetype_index,
-                    .old_mask = entity_mask,
-                    .new_mask = new_mask,
-                    .direction = .adding,
-                    .component_mask = component_bit,
-                    .component_data = @unionInit(
-                        MigrationEntry.ComponentDataUnion,
-                        @tagName(component),
-                        data
-                    ),
-                };
+                const component_data = @unionInit(
+                    MigrationQueue.Entry.ComponentDataUnion,
+                    @tagName(component),
+                    data
+                );
 
-                if (is_migrating) {
-                    // Entity already has pending migrations - append to existing list
-                    const entry_list = self.migration_map.getPtr(entity).?;
-                    try entry_list.append(self.allocator, migration);
-                } else {
-                    // First migration for this entity - create new list
-                    var list = ArrayList(MigrationEntry){};
-                    try list.append(self.allocator, migration);
-                    try self.migration_map.put(entity, list);
-                }
+                try self.migration_queue.addMigration(
+                    entity,
+                    archetype_index,
+                    entity_mask,
+                    new_mask,
+                    .adding,
+                    component_bit,
+                    component_data,
+                    is_migrating,
+                );
             }
 
             else if(direction == .removing){
                 const new_mask = MaskManager.Runtime.removeComponent(entity_mask, component);
                 if(!MaskManager.maskContains(entity_mask, component_bit)) { return error.RemovingNonexistingComponent; }
 
-                const migration = MigrationEntry {
-                    .entity = entity,
-                    .archetype_index = archetype_index,
-                    .old_mask = entity_mask,
-                    .new_mask = new_mask,
-                    .direction = .removing,
-                    .component_mask = component_bit,
-                    .component_data = @unionInit(
-                        MigrationEntry.ComponentDataUnion,
-                        @tagName(component),
-                        data
-                    ),
-                };
+                const component_data = @unionInit(
+                    MigrationQueue.Entry.ComponentDataUnion,
+                    @tagName(component),
+                    data
+                );
 
-                if (is_migrating) {
-                    // Entity already has pending migrations - append to existing list
-                    const entry_list = self.migration_map.getPtr(entity).?;
-                    try entry_list.append(self.allocator, migration);
-                } else {
-                    // First migration for this entity - create new list
-                    var list = ArrayList(MigrationEntry){};
-                    try list.append(self.allocator, migration);
-                    try self.migration_map.put(entity, list);
-                }
+                try self.migration_queue.addMigration(
+                    entity,
+                    archetype_index,
+                    entity_mask,
+                    new_mask,
+                    .removing,
+                    component_bit,
+                    component_data,
+                    is_migrating,
+                );
             }
         }
 
         pub fn flushMigrationQueue(self: *Self) ![]MigrationResult{
-            if(self.migration_map.count() == 0) return &.{};
+            if(self.migration_queue.count() == 0) return &.{};
             var results = ArrayList(MigrationResult){};
-            try results.ensureTotalCapacity(self.allocator, self.migration_map.count());
+            try results.ensureTotalCapacity(self.allocator, self.migration_queue.count());
 
             // Collect all migrations and sort by (old_mask, archetype_index DESC)
             // This prevents swapRemove from invalidating indices of unprocessed entities
             const MigrationWork = struct {
                 entity: Entity,
-                entries: ArrayList(MigrationEntry),
+                entries: ArrayList(MigrationQueue.Entry),
                 old_mask: MaskManager.Mask,
                 archetype_index: u32,
             };
 
             var work_items = ArrayList(MigrationWork){};
-            try work_items.ensureTotalCapacity(self.allocator, self.migration_map.count());
+            try work_items.ensureTotalCapacity(self.allocator, self.migration_queue.count());
             defer work_items.deinit(self.allocator);
 
-            var iter = self.migration_map.iterator();
+            var iter = self.migration_queue.iterator();
             while (iter.next()) |kv| {
                 const entity = kv.key_ptr.*;
                 const entries = kv.value_ptr.*;
@@ -582,7 +504,7 @@ pub fn ArchetypePoolType(comptime config: PoolConfig) type {
                 entries.deinit(self.allocator);
             }
 
-            self.migration_map.clearRetainingCapacity();
+            self.migration_queue.clear();
             return try results.toOwnedSlice(self.allocator);
         }
 
@@ -666,12 +588,8 @@ pub fn ArchetypePoolType(comptime config: PoolConfig) type {
             self.new_archetypes.deinit(self.allocator);
             self.reallocated_archetypes.deinit(self.allocator);
 
-            // Clean up migration map
-            var iter = self.migration_map.valueIterator();
-            while (iter.next()) |entry_list| {
-                entry_list.deinit(self.allocator);
-            }
-            self.migration_map.deinit();
+            // Clean up migration queue
+            self.migration_queue.deinit();
         }
 
         fn checkIfEntInPool(pool_name: PR.PoolName) bool {
