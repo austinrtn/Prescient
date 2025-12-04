@@ -11,6 +11,8 @@ const Entity = EM.Entity;
 const EB = @import("EntityBuilder.zig");
 const EntityBuilderType = EB.EntityBuilderType;
 
+const BitmaskMap = struct { bitmask_index: u32, in_list_index: u32};
+
 fn StorageType(comptime components: []const CR.ComponentName) type {
     const field_count = components.len + 2;
     var fields:[field_count] std.builtin.Type.StructField = undefined;
@@ -26,9 +28,9 @@ fn StorageType(comptime components: []const CR.ComponentName) type {
 
     //~Field:bitmask_index: u32
     fields[1] = .{
-        .name = "bitmask_index",
-        .type = ArrayList(?u32),
-        .alignment = @alignOf(ArrayList(?u32)),
+        .name = "bitmask_map",
+        .type = ArrayList(?BitmaskMap),
+        .alignment = @alignOf(ArrayList(?BitmaskMap)),
         .default_value_ptr = null,
         .is_comptime = false,
     };
@@ -47,8 +49,7 @@ fn StorageType(comptime components: []const CR.ComponentName) type {
             .is_comptime = false,
         };
     }
-
-    return @Type(.{
+return @Type(.{
         .@"struct" = .{
             .layout = .auto,
             .fields = &fields,
@@ -99,7 +100,7 @@ pub fn SparseSetPoolType(comptime config: PoolConfig) type {
         storage: Storage,
         masks: ArrayList(struct {
             mask: MaskManager.Mask,
-            entities: ArrayList(Entity),
+            entities: ArrayList(u32),
         }),
         empty_indexes: ArrayList(usize),
 
@@ -130,12 +131,16 @@ pub fn SparseSetPoolType(comptime config: PoolConfig) type {
             const components = comptime EB.getComponentsFromData(pool_components, Builder, component_data); 
             const bitmask = MaskManager.Comptime.createMask(components);
 
-            const Storage_index = self.empty_indexes.pop() orelse blk: {
+            const storage_index = self.empty_indexes.pop() orelse blk: {
                 inline for(std.meta.fields(Storage)) |field| {
                     try @field(self.storage, field.name).append(self.allocator, null);
                 }
                 break :blk self.storage.entities.items.len - 1;
             };
+
+            inline for(std.meta.fields(Storage)) |field| {
+                @field(self.storage, field.name).items[storage_index] = null;
+            }
 
             inline for(components) |component| {
                 const T = CR.getTypeByName(component);
@@ -168,19 +173,16 @@ pub fn SparseSetPoolType(comptime config: PoolConfig) type {
                     }
                     break :blk result;
                 };
-                @field(self.storage, @tagName(component)).items[Storage_index] = typed_data;
+
+                @field(self.storage, @tagName(component)).items[storage_index] = typed_data;
             }
 
-            inline for(std.meta.fields(Storage)) |field| {
-                @field(self.storage, field.name).items[Storage_index] = null;
-            }
-
-            self.storage.entities.items[Storage_index] = entity;
+            self.storage.entities.items[storage_index] = entity;
             const bitmask_index = try self.getOrCreateBitmask(bitmask);
-            self.storage.bitmask_index.items[Storage_index] = bitmask_index;
+            self.storage.bitmask_map.items[storage_index] = BitmaskMap;
             try self.masks.items[bitmask_index].entities.append(self.allocator, entity);
 
-            return @intCast(Storage_index);
+            return @intCast(storage_index);
         }
 
         fn getEntityMetadata(self: *Self, storage_index: u32) struct { Entity, MaskManager.Mask, usize } {
@@ -239,6 +241,15 @@ pub fn SparseSetPoolType(comptime config: PoolConfig) type {
             self.storage.bitmask_index.items[storage_index] = new_bitmask_index;
         }
 
+        pub fn getComponent(self: *Self, storage_index: u32, comptime component: CR.ComponentName) !*CR.getTypeByName(component) {
+            const result = &@field(self.storage, @tagName(component)).items[@intCast(storage_index)];
+            if(result.*) |*comp_data| {
+                return comp_data;
+            } else {
+                return error.EntityDoesNotHaveComponent;
+            }
+        }
+
         fn getOrCreateBitmask(self: *Self, bitmask: MaskManager.Mask) !u32 {
             for (self.masks.items, 0..) |mask_entry, i| {
                 if (mask_entry.mask == bitmask) {
@@ -262,8 +273,11 @@ test "Basic" {
     defer pool.deinit();
 
     const entity = EM.Entity{.index = 3, .generation = 0};
-    const ent = try pool.addEntity(entity, .{.Position = .{.x = 1, .y = 4}});
+    const ent_storage_index= try pool.addEntity(entity, .{.Health = CR.Health{.current = 100, .max = 200}});
 
-    try pool.addComponent(ent, .Velocity, .{.dx = 0, .dy = 0});
-    try pool.removeComponent(ent, .Velocity);
+    try pool.addComponent(ent_storage_index, .Position, .{.x = 0, .y = 0});
+    try pool.addComponent(ent_storage_index, .Velocity, .{.dx = 0, .dy = 0});
+    try pool.removeComponent(ent_storage_index, .Velocity);
+    _ = try pool.getComponent(ent_storage_index, .Position); 
+    _ = try pool.getComponent(ent_storage_index, .Health); 
 }
