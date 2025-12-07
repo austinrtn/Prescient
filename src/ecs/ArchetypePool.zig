@@ -348,6 +348,7 @@ pub fn ArchetypePoolType(comptime config: PoolConfig) type {
             }
 
             //Make sure component has non-null data when adding component
+            //Should be null when removing component
             if(direction == .adding and data == null) {
                 std.debug.print("\ncomponent data cannont be null when adding a component!\n", .{});
                 return error.NullComponentData;
@@ -534,18 +535,20 @@ pub fn ArchetypePoolType(comptime config: PoolConfig) type {
                 const in_old = MaskManager.maskContains(old_mask, field_bit);
                 const in_new = MaskManager.maskContains(new_mask, field_bit);
 
+                // Component exists in both - copy it over
                 if (in_old and in_new) {
-                    // Component exists in both - copy it over
                     var dest_array_ptr = @field(dest_archetype, field_name).?;
                     var src_array_ptr = @field(src_archetype, field_name).?;
                     try dest_array_ptr.append(allocator, src_array_ptr.items[archetype_index]);
                     _ = src_array_ptr.swapRemove(archetype_index);
-                } else if (in_new and !in_old) {
-                    // New component being added - allocate undefined, will be set in step 3
+                } 
+                // New component being added - allocate undefined, will be set in step 3
+                else if (in_new and !in_old) {
                     var dest_array_ptr = @field(dest_archetype, field_name).?;
                     try dest_array_ptr.append(allocator, undefined);
-                } else if (in_old and !in_new) {
-                    // Component being removed - just remove from source
+                } 
+                // Component being removed - just remove from source
+                else if (in_old and !in_new) {
                     var src_array_ptr = @field(src_archetype, field_name).?;
                     _ = src_array_ptr.swapRemove(archetype_index);
                 }
