@@ -184,5 +184,10 @@
     }
   },
   "active": "e4aa5988a3ec095f",
-  "lastOpenFiles": []
+  "lastOpenFiles": [
+    "1.02 - Pool Registry.md",
+    "1.01 - Pool Configuration.md",
+    "1.00 - Entity Pools.md",
+    "ADR 001 - Entity Pools.md"
+  ]
 }
