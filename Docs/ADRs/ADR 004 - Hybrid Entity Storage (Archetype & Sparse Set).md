@@ -6,5 +6,4 @@ Taking advantage of Zig's compile time capabilities allows developers to choose 
 
 # The Trade-Offs
 The main-trade off is the added learning curve to Prescient.  This is mitigated by prioritizing functional explanations of the trade offs between the two rather than the architectural differences, and by making sure that any entity storage configuration is opt-in rather than forced upon the user.  Other than that, there are no other considerable trade offs.  Performance and flexibility remains the same for both strategies, and the API stays uniform thanks to Zig's compile-time capabilities.
-
-# Why Comptime? 
+Lo

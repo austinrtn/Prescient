@@ -36,7 +36,9 @@ to gradually understand Prescient's uses and best practices.
 
 **API** - Essentially an index for users wanting to learn what the API has to offer and how to use it.
 
-Keep the type of document in mind when suggesting changes.
+Keep the type of document in mind when suggesting changes.  You should be able to determine
+which type of documentation the provided doc is based off the folder it's located in the vault,
+and the general context of the doc.  If you are unsure, ask first.
 
 # Suggesting and Making Changes
 Grammar and spelling corrections are applied automatically and do not need to be mentioned to the user.
@@ -58,3 +60,8 @@ Do not mention grammar or spelling fixes in your suggestions - these are handled
 2. Ask any clarifying questions necessary before making suggestions
 3. Provide substantive suggestions to user (content, structure, formatting improvements)
 4. Make all user-approved changes AND automatically apply all grammar/spelling corrections
+
+# General Questions
+You may be asked general questions about documentation decision making rather than reviewing whole
+pages of documentation itself. Give your best answer keeping in mind the outlined criteria from the
+Assignment section.

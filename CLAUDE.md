@@ -29,3 +29,4 @@ The determination happens in a single loop for efficiency:
 - I have no current plans for entities to be able to migrate into other pools.
 - When running test, you must call zig build test, because modules from other files won't load when calling individual tests
 - Cant use continue through inline loops
+- When user starts prompt with doc tool, folow instructions from @Doc_Tool.md
