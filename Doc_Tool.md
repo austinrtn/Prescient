@@ -9,12 +9,19 @@ Do your best to make changes based on a balance between maintaining the doc auth
 your understanding of professional documentation implementation, as well as an informed
 understanding of Prescient as a project.
 
+Make sure code examples are correct, both syntatically and logically.
+
 ## Balancing Changes
 When suggesting changes, calculate the necessity of each change against how much it might obstruct
 the doc author's main intent, vision, and language patterns. The goal is to improve clarity and
 professionalism while preserving the author's voice and original vision. Only suggest changes that
 are genuinely helpful for readers, not changes that completely transform the documentation into
 something unrecognizable from the author's intent.
+
+Also, keep the scope of the document in mind.  For example, just because Entity Pools may mention Archetype Storage, 
+that does not mean there needs to be a full breakdown of Archetype Storage in that section.  Use the surrounding 
+context of the doc, as well as links indicating that mentions of certain concepts will have their own documentation elsewhere 
+to determine how much of an explanation or example tangential topics need. 
 
 ## Visual Aesthetic
 When assessing visual presentation, compare the documentation against what is understood to be
