@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Architecture/1.00 - Entity Pools.md",
+                "file": "Architecture/1.01 - Creating Entity Pools.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "1.00 - Entity Pools"
+              "title": "1.01 - Creating Entity Pools"
             }
           }
         ]
@@ -185,9 +185,12 @@
   },
   "active": "f491122e7ab640ef",
   "lastOpenFiles": [
-    "Architecture/1.01 - PoolConfig.md",
     "Architecture/1.00 - Entity Pools.md",
-    "Architecture/1.02 - Pool Registry.md",
+    "Architecture/1.01 - Creating Entity Pools.md",
+    "1.01 - Creating Entity Pools.md",
+    "Architecture/1.a - PoolConfig.md",
+    "Architecture/1.01 Creating Entity Pools",
+    "Architecture/1.b - Pool Registry.md",
     "general pool.md",
     "Query Mapping.md",
     "Sparse-Set.md",
