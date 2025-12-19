@@ -4,11 +4,11 @@
     "type": "split",
     "children": [
       {
-        "id": "4b6ac20ab609d423",
+        "id": "11f46563017070a3",
         "type": "tabs",
         "children": [
           {
-            "id": "f491122e7ab640ef",
+            "id": "2dfa0c7be9e9b4d0",
             "type": "leaf",
             "state": {
               "type": "markdown",
@@ -183,12 +183,13 @@
       "bases:Create new base": false
     }
   },
-  "active": "f491122e7ab640ef",
+  "active": "2dfa0c7be9e9b4d0",
   "lastOpenFiles": [
     "Architecture/1.00 - Entity Pools.md",
     "Architecture/1.01 - Creating Entity Pools.md",
-    "1.01 - Creating Entity Pools.md",
+    "Architecture/1.c Pool Examples.md",
     "Architecture/1.a - PoolConfig.md",
+    "1.01 - Creating Entity Pools.md",
     "Architecture/1.01 Creating Entity Pools",
     "Architecture/1.b - Pool Registry.md",
     "general pool.md",
