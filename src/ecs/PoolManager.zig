@@ -92,15 +92,24 @@ pub const PoolManager = struct {
 
             for(flush_results) |result| {
                 var slot = try entity_manager.getSlot(result.entity);
-                const storage_index_holder = slot.storage_index;
 
-                slot.mask_list_index = result.mask_list_index;
-                slot.storage_index = result.archetype_index;
+                // Comptime dispatch based on pool type
+                if (@hasField(@TypeOf(result), "swapped_entity")) {
+                    // ArchetypePool: storage_index changes, handle swapped entity
+                    const storage_index_holder = slot.storage_index;
+                    slot.mask_list_index = result.mask_list_index;
+                    slot.storage_index = result.storage_index;
 
-                if(result.swapped_entity) |swapped_ent| {
-                    const swapped_slot = try entity_manager.getSlot(swapped_ent);
-                    swapped_slot.storage_index = storage_index_holder;
+                    if(result.swapped_entity) |swapped_ent| {
+                        const swapped_slot = try entity_manager.getSlot(swapped_ent);
+                        swapped_slot.storage_index = storage_index_holder;
+                    }
+                } else {
+                    // SparseSetPool: storage_index is stable, just update mask info
+                    slot.mask_list_index = result.bitmask_index;
                 }
+
+                slot.is_migrating = false;
             }
         }
 

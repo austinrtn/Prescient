@@ -43,7 +43,7 @@ fn ArchetypeCacheType(comptime components: []const CR.ComponentName) type {
     });
 } 
 
-fn PoolElementType(comptime components: []const CR.ComponentName) type {
+fn ArchElementType(comptime components: []const CR.ComponentName) type {
     var fields: [4]StructField = undefined;
     const default_arch_list = comptime ArrayList(usize){};
     const arch_cache_arraylist = comptime ArrayList(ArchetypeCacheType(components));
@@ -128,8 +128,8 @@ fn countMatchingPools(comptime components: []const CR.ComponentName) comptime_in
     return count;
 }
 
-fn findPoolElements(comptime components: []const CR.ComponentName) [countMatchingPools(components)]PoolElementType(components) {
-    const PoolElement = PoolElementType(components);
+fn findPoolElements(comptime components: []const CR.ComponentName) [countMatchingPools(components)]ArchElementType(components) {
+    const PoolElement = ArchElementType(components);
     const count = countMatchingPools(components);
     var pool_elements: [count]PoolElement = undefined;
     var idx: usize = 0;
@@ -225,7 +225,7 @@ fn QueryStorage(comptime PoolElement: type, comptime found_pool_elements: anytyp
 //
 
 pub fn QueryType(comptime components: []const CR.ComponentName) type {
-    const PoolElement = PoolElementType(components);
+    const PoolElement = ArchElementType(components);
     const found_pool_elements = comptime findPoolElements(components);
     const POOL_COUNT = found_pool_elements.len;
 

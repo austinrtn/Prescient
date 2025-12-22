@@ -4,7 +4,7 @@
 // - is_migrating flag on EntitySlot enables O(1) check before hashmap lookup
 // - All migrations for an entity are collected in a list
 // - On flush: resolve final mask, single move, then set all new component data
-// This prevents stale archetype_index bugs and ensures one move per entity per flush.
+// This prevents stale storage_index bugs and ensures one move per entity per flush.
 
 const std = @import("std");
 const CR = @import("ComponentRegistry.zig");
@@ -65,7 +65,7 @@ pub fn MigrationEntryType(comptime pool_components: []const CR.ComponentName, co
         pub const ComponentDataUnion = CompDataUnion;
 
         entity: Entity,
-        archetype_index: u32,
+        storage_index: u32,
         direction: MoveDirection,
         old_mask: Mask,
         new_mask: Mask,
@@ -76,7 +76,7 @@ pub fn MigrationEntryType(comptime pool_components: []const CR.ComponentName, co
 
 pub const MigrationResult = struct {
     entity: Entity,
-    archetype_index: u32,
+    storage_index: u32,
     mask_list_index: u32,
     swapped_entity: ?Entity,
 };
@@ -101,7 +101,7 @@ pub fn MigrationQueueType(comptime pool_components: []const CR.ComponentName) ty
         pub fn addMigration(
             self: *Self,
             entity: Entity,
-            archetype_index: u32,
+            storage_index: u32,
             old_mask: MaskManager.Mask,
             new_mask: MaskManager.Mask,
             direction: MoveDirection,
@@ -111,7 +111,7 @@ pub fn MigrationQueueType(comptime pool_components: []const CR.ComponentName) ty
         ) !void {
             const migration = MigrationEntry{
                 .entity = entity,
-                .archetype_index = archetype_index,
+                .storage_index = storage_index,
                 .old_mask = old_mask,
                 .new_mask = new_mask,
                 .direction = direction,

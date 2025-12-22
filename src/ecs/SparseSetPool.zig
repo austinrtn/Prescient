@@ -14,6 +14,7 @@ const MQ = @import("MigrationQueue.zig");
 const MoveDirection = MQ.MoveDirection;
 const MigrationQueueType = MQ.MigrationQueueType;
 const MigrationEntryType = MQ.MigrationEntryType;
+const PoolInterfaceType = @import("PoolInterface.zig").PoolInterfaceType;
 
 const BitmaskMap = struct { bitmask_index: u32, in_list_index: u32};
 
@@ -92,13 +93,18 @@ pub fn SparseSetPoolType(comptime config: PoolConfig) type {
     };
 
     const POOL_MASK = comptime MaskManager.Comptime.createMask(pool_components);
-    const Builder = EntityBuilderType(req, opt);
+    const MigrationQueue = MQ.MigrationQueueType(pool_components);
 
     const Storage = StorageType(pool_components);
     return struct {
         const Self = @This();
         pub const NAME = config.name;
-        pub const MASK = POOL_MASK;
+        pub const pool_mask = POOL_MASK;
+        pub const REQ_MASK = MaskManager.Comptime.createMask(req);
+        pub const COMPONENTS = pool_components;
+        pub const REQ_COMPONENTS = req;
+        pub const OPT_COMPONENTS = opt;
+        pub const Builder = EntityBuilderType(req, opt);
 
         allocator: Allocator,
         storage: Storage,
@@ -107,6 +113,7 @@ pub fn SparseSetPoolType(comptime config: PoolConfig) type {
             storage_indexes: ArrayList(u32),
         }),
         empty_indexes: ArrayList(usize),
+        migration_queue: MigrationQueue,
 
 
         pub fn init(allocator: Allocator) Self {
@@ -114,6 +121,7 @@ pub fn SparseSetPoolType(comptime config: PoolConfig) type {
             self.allocator = allocator;
             self.masks = .{};
             self.empty_indexes = .{};
+            self.migration_queue = MigrationQueue.init(allocator);
 
             inline for(std.meta.fields(Storage)) |field| {
                 @field(self.storage, field.name) = .{};
@@ -130,18 +138,23 @@ pub fn SparseSetPoolType(comptime config: PoolConfig) type {
             }
             self.masks.deinit(self.allocator);
             self.empty_indexes.deinit(self.allocator);
+            self.migration_queue.deinit();
         }
 
-        pub fn addEntity(self: *Self, entity: EM.Entity, comptime component_data: Builder) !u32 {
-            const components = comptime EB.getComponentsFromData(pool_components, Builder, component_data); 
+        pub fn getInterface(self: *Self, entity_manager: *EM.EntityManager) PoolInterfaceType(NAME) {
+            return PoolInterfaceType(NAME).init(self, entity_manager);
+        }
+
+        pub fn addEntity(self: *Self, entity: EM.Entity, comptime component_data: Builder) !struct { storage_index: u32, archetype_index: u32 } {
+            const components = comptime EB.getComponentsFromData(pool_components, Builder, component_data);
             const bitmask = MaskManager.Comptime.createMask(components);
 
-            const storage_index = self.empty_indexes.pop() orelse blk: {
+            const storage_index: u32 = @intCast(self.empty_indexes.pop() orelse blk: {
                 inline for(std.meta.fields(Storage)) |field| {
                     try @field(self.storage, field.name).append(self.allocator, null);
                 }
                 break :blk self.storage.entities.items.len - 1;
-            };
+            });
 
             inline for(std.meta.fields(Storage)) |field| {
                 @field(self.storage, field.name).items[storage_index] = null;
@@ -185,13 +198,16 @@ pub fn SparseSetPoolType(comptime config: PoolConfig) type {
             self.storage.entities.items[storage_index] = entity;
             const new_bitmask_map = try self.getOrCreateBitmaskMap(bitmask);
             self.storage.bitmask_map.items[storage_index] = new_bitmask_map;
-            try self.masks.items[@intCast(new_bitmask_map.bitmask_index)].storage_indexes.append(self.allocator, @intCast(storage_index));
+            try self.masks.items[@intCast(new_bitmask_map.bitmask_index)].storage_indexes.append(self.allocator, storage_index);
 
-            return @intCast(storage_index);
+            return .{
+                .storage_index = storage_index,
+                .archetype_index = new_bitmask_map.bitmask_index,
+            };
         }
 
         pub fn removeEntity(self: *Self, storage_index: u32, pool_name: PR.PoolName) !void {
-            validateEntityInPool(pool_name);
+            try validateEntityInPool(pool_name);
 
             const bitmask_map = self.getBitmaskMap(storage_index);
             inline for(std.meta.fields(Storage)) |field| {
@@ -205,13 +221,88 @@ pub fn SparseSetPoolType(comptime config: PoolConfig) type {
         pub fn addOrRemoveComponent(
             self: *Self,
             entity: Entity,
-            mask_list_index: u32,
+            _: u32, // mask_list_index - unused for SparseSetPool, kept for API uniformity
             pool_name: PR.PoolName,
+            storage_index: u32,
             is_migrating: bool,
             comptime direction: MoveDirection,
             comptime component: CR.ComponentName,
             data: ?CR.getTypeByName(component)
         ) !void {
+            // Compile-time validation: ensure component exists in this pool
+            validateComponentInPool(component);
+
+            // Runtime validation: ensure entity belongs to this pool
+            try validateEntityInPool(pool_name);
+
+            // Check to make sure user is not removing a required component
+            comptime {
+                if (direction == .removing) {
+                    for (req) |req_comp| {
+                        if (req_comp == component) {
+                            @compileError("You can not remove required component "
+                                ++ @tagName(component) ++ " from pool " ++ @typeName(Self));
+                        }
+                    }
+                }
+            }
+
+            // Make sure component has non-null data when adding component
+            // Should be null when removing component
+            if (direction == .adding and data == null) {
+                std.debug.print("\ncomponent data cannot be null when adding a component!\n", .{});
+                return error.NullComponentData;
+            }
+
+            const bitmask_map = self.getBitmaskMap(storage_index);
+            const entity_mask = self.getBitmask(bitmask_map.bitmask_index);
+            const component_bit = MaskManager.Comptime.componentToBit(component);
+
+            if (direction == .adding) {
+                if (MaskManager.maskContains(entity_mask, component_bit)) {
+                    return error.AddingExistingComponent;
+                }
+                const new_mask = MaskManager.Runtime.addComponent(entity_mask, component);
+
+                const component_data = @unionInit(
+                    MigrationQueue.Entry.ComponentDataUnion,
+                    @tagName(component),
+                    data
+                );
+
+                try self.migration_queue.addMigration(
+                    entity,
+                    storage_index,
+                    entity_mask,
+                    new_mask,
+                    .adding,
+                    component_bit,
+                    component_data,
+                    is_migrating,
+                );
+            } else if (direction == .removing) {
+                if (!MaskManager.maskContains(entity_mask, component_bit)) {
+                    return error.RemovingNonexistingComponent;
+                }
+                const new_mask = MaskManager.Runtime.removeComponent(entity_mask, component);
+
+                const component_data = @unionInit(
+                    MigrationQueue.Entry.ComponentDataUnion,
+                    @tagName(component),
+                    null
+                );
+
+                try self.migration_queue.addMigration(
+                    entity,
+                    storage_index,
+                    entity_mask,
+                    new_mask,
+                    .removing,
+                    component_bit,
+                    component_data,
+                    is_migrating,
+                );
+            }
         }
 
         pub fn addComponent(self: *Self, storage_index: u32, comptime component:CR.ComponentName, value: CR.getTypeByName(component)) !void {
@@ -236,11 +327,11 @@ pub fn SparseSetPoolType(comptime config: PoolConfig) type {
             const bitmask = self.getBitmask(bitmask_map.bitmask_index);
 
             const new_bitmask = MaskManager.Comptime.removeComponent(bitmask, component);
-            const comp_storage = &@field(self.storage, @tagName(component)).items[storage_index];  
+            const comp_storage = &@field(self.storage, @tagName(component)).items[storage_index];
 
             if(comp_storage.* == null) return error.EntityDoesNotHaveComponent;
             self.removeFromMaskList(bitmask_map);
-           
+
             const new_bitmask_mask = try self.getOrCreateBitmaskMap(new_bitmask);
             try self.masks.items[new_bitmask_mask.bitmask_index].storage_indexes.append(self.allocator, storage_index);
             self.storage.bitmask_map.items[storage_index] = new_bitmask_mask;
@@ -248,8 +339,84 @@ pub fn SparseSetPoolType(comptime config: PoolConfig) type {
             comp_storage.* = null;
         }
 
-        pub fn getComponent(self: *Self, storage_index: u32, comptime component: CR.ComponentName) !*CR.getTypeByName(component) {
+        /// Migration result for SparseSetPool - no swapped_entity since storage_index is stable
+        pub const SparseMigrationResult = struct {
+            entity: Entity,
+            storage_index: u32,
+            bitmask_index: u32,
+        };
+
+        pub fn flushMigrationQueue(self: *Self) ![]SparseMigrationResult {
+            if (self.migration_queue.count() == 0) return &.{};
+
+            var results = ArrayList(SparseMigrationResult){};
+            try results.ensureTotalCapacity(self.allocator, self.migration_queue.count());
+
+            var iter = self.migration_queue.iterator();
+            while (iter.next()) |kv| {
+                const entity = kv.key_ptr.*;
+                var entries = kv.value_ptr.*;
+
+                if (entries.items.len == 0) continue;
+
+                const first_entry = entries.items[0];
+                const storage_index = first_entry.storage_index;
+
+                // Step 1: Resolve - compute final mask from all entries
+                var final_mask = first_entry.old_mask;
+                for (entries.items) |entry| {
+                    if (entry.direction == .adding) {
+                        final_mask |= entry.component_mask;
+                    } else {
+                        final_mask &= ~entry.component_mask;
+                    }
+                }
+
+                // Step 2: Update mask group membership
+                const old_bitmask_map = self.getBitmaskMap(storage_index);
+                self.removeFromMaskList(old_bitmask_map);
+
+                const new_bitmask_map = try self.getOrCreateBitmaskMap(final_mask);
+                try self.masks.items[new_bitmask_map.bitmask_index].storage_indexes.append(self.allocator, storage_index);
+                self.storage.bitmask_map.items[storage_index] = new_bitmask_map;
+
+                // Step 3: Apply component data changes in-place
+                for (entries.items) |entry| {
+                    switch (entry.component_data) {
+                        inline else => |data, tag| {
+                            const comp_storage = &@field(self.storage, @tagName(tag)).items[storage_index];
+                            if (entry.direction == .adding) {
+                                comp_storage.* = data;
+                            } else {
+                                comp_storage.* = null;
+                            }
+                        }
+                    }
+                }
+
+                try results.append(self.allocator, .{
+                    .entity = entity,
+                    .storage_index = storage_index,
+                    .bitmask_index = new_bitmask_map.bitmask_index,
+                });
+
+                // Clean up entry list
+                entries.deinit(self.allocator);
+            }
+
+            self.migration_queue.clear();
+            return try results.toOwnedSlice(self.allocator);
+        }
+
+        pub fn getComponent(
+            self: *Self,
+            _: u32, // mask_list_index - unused for SparseSetPool, kept for API uniformity
+            storage_index: u32,
+            pool_name: PR.PoolName,
+            comptime component: CR.ComponentName
+        ) !*CR.getTypeByName(component) {
             validateComponentInPool(component);
+            try validateEntityInPool(pool_name);
 
             const result = &@field(self.storage, @tagName(component)).items[@intCast(storage_index)];
             if(result.*) |*comp_data| {
@@ -366,14 +533,14 @@ test "Basic - all optional components" {
     defer pool.deinit();
 
     const entity = EM.Entity{.index = 3, .generation = 0};
-    const ent_storage_index= try pool.addEntity(entity, .{.Health = CR.Health{.current = 100, .max = 200}});
+    const result = try pool.addEntity(entity, .{.Health = CR.Health{.current = 100, .max = 200}});
 
-    try pool.addComponent(ent_storage_index, .Position, .{.x = 0, .y = 0});
-    try pool.addComponent(ent_storage_index, .Velocity, .{.dx = 0, .dy = 0});
-    try pool.removeComponent(ent_storage_index, .Velocity);
-    try pool.addComponent(ent_storage_index, .Attack, .{.damage = 100, .crit_chance = 2});
-    _ = try pool.getComponent(ent_storage_index, .Position);
-    _ = try pool.getComponent(ent_storage_index, .Health);
+    try pool.addComponent(result.storage_index, .Position, .{.x = 0, .y = 0});
+    try pool.addComponent(result.storage_index, .Velocity, .{.dx = 0, .dy = 0});
+    try pool.removeComponent(result.storage_index, .Velocity);
+    try pool.addComponent(result.storage_index, .Attack, .{.damage = 100, .crit_chance = 2});
+    _ = try pool.getComponent(0, result.storage_index, SparsePool.NAME, .Position);
+    _ = try pool.getComponent(0, result.storage_index, SparsePool.NAME, .Health);
 }
 
 test "Pool with required components only" {
@@ -387,17 +554,17 @@ test "Pool with required components only" {
     defer pool.deinit();
 
     const entity1 = EM.Entity{.index = 1, .generation = 0};
-    const storage_idx = try pool.addEntity(entity1, .{
+    const result = try pool.addEntity(entity1, .{
         .Position = .{.x = 10, .y = 20},
         .Health = .{.current = 50, .max = 100}
     });
 
     // Verify we can get the components
-    const pos = try pool.getComponent(storage_idx, .Position);
+    const pos = try pool.getComponent(0, result.storage_index, SparsePool.NAME, .Position);
     try testing.expectEqual(@as(f32, 10), pos.x);
     try testing.expectEqual(@as(f32, 20), pos.y);
 
-    const health = try pool.getComponent(storage_idx, .Health);
+    const health = try pool.getComponent(0, result.storage_index, SparsePool.NAME, .Health);
     try testing.expectEqual(@as(u32, 50), health.current);
     try testing.expectEqual(@as(u32, 100), health.max);
 }
@@ -414,27 +581,27 @@ test "Pool with mixed required and optional components" {
 
     // Entity with only required component
     const entity1 = EM.Entity{.index = 1, .generation = 0};
-    const idx1 = try pool.addEntity(entity1, .{
+    const result1 = try pool.addEntity(entity1, .{
         .Position = .{.x = 5, .y = 5}
     });
 
     // Entity with required + optional components
     const entity2 = EM.Entity{.index = 2, .generation = 0};
-    const idx2 = try pool.addEntity(entity2, .{
+    const result2 = try pool.addEntity(entity2, .{
         .Position = .{.x = 10, .y = 10},
         .Velocity = .{.dx = 1, .dy = 2},
         .Health = .{.current = 100, .max = 100}
     });
 
     // Verify entity1 has Position but not Velocity
-    _ = try pool.getComponent(idx1, .Position);
-    try testing.expectError(error.EntityDoesNotHaveComponent, pool.getComponent(idx1, .Velocity));
-    try testing.expectError(error.EntityDoesNotHaveComponent, pool.getComponent(idx1, .Health));
+    _ = try pool.getComponent(0, result1.storage_index, SparsePool.NAME, .Position);
+    try testing.expectError(error.EntityDoesNotHaveComponent, pool.getComponent(0, result1.storage_index, SparsePool.NAME, .Velocity));
+    try testing.expectError(error.EntityDoesNotHaveComponent, pool.getComponent(0, result1.storage_index, SparsePool.NAME, .Health));
 
     // Verify entity2 has all components
-    _ = try pool.getComponent(idx2, .Position);
-    _ = try pool.getComponent(idx2, .Velocity);
-    _ = try pool.getComponent(idx2, .Health);
+    _ = try pool.getComponent(0, result2.storage_index, SparsePool.NAME, .Position);
+    _ = try pool.getComponent(0, result2.storage_index, SparsePool.NAME, .Velocity);
+    _ = try pool.getComponent(0, result2.storage_index, SparsePool.NAME, .Health);
 }
 
 test "Error: adding component that already exists" {
@@ -448,14 +615,14 @@ test "Error: adding component that already exists" {
     defer pool.deinit();
 
     const entity = EM.Entity{.index = 1, .generation = 0};
-    const idx = try pool.addEntity(entity, .{
+    const result = try pool.addEntity(entity, .{
         .Position = .{.x = 5, .y = 5}
     });
 
     // Try to add Position again - should error
     try testing.expectError(
         error.EntityAlreadyHasComponent,
-        pool.addComponent(idx, .Position, .{.x = 10, .y = 10})
+        pool.addComponent(result.storage_index, .Position, .{.x = 10, .y = 10})
     );
 }
 
@@ -470,14 +637,14 @@ test "Error: removing component that doesn't exist" {
     defer pool.deinit();
 
     const entity = EM.Entity{.index = 1, .generation = 0};
-    const idx = try pool.addEntity(entity, .{
+    const result = try pool.addEntity(entity, .{
         .Position = .{.x = 5, .y = 5}
     });
 
     // Try to remove component entity doesn't have - should error
     try testing.expectError(
         error.EntityDoesNotHaveComponent,
-        pool.removeComponent(idx, .Health)
+        pool.removeComponent(result.storage_index, .Health)
     );
 }
 
@@ -492,14 +659,14 @@ test "Error: getting component that doesn't exist" {
     defer pool.deinit();
 
     const entity = EM.Entity{.index = 1, .generation = 0};
-    const idx = try pool.addEntity(entity, .{
+    const result = try pool.addEntity(entity, .{
         .Position = .{.x = 5, .y = 5}
     });
 
     // Try to get component entity doesn't have - should error
     try testing.expectError(
         error.EntityDoesNotHaveComponent,
-        pool.getComponent(idx, .Velocity)
+        pool.getComponent(0, result.storage_index, SparsePool.NAME, .Velocity)
     );
 }
 
@@ -518,32 +685,32 @@ test "Entity removal and slot reuse" {
     const entity2 = EM.Entity{.index = 2, .generation = 0};
     const entity3 = EM.Entity{.index = 3, .generation = 0};
 
-    const idx1 = try pool.addEntity(entity1, .{.Position = .{.x = 1, .y = 1}});
-    const idx2 = try pool.addEntity(entity2, .{.Position = .{.x = 2, .y = 2}});
-    const idx3 = try pool.addEntity(entity3, .{.Position = .{.x = 3, .y = 3}});
+    const result1 = try pool.addEntity(entity1, .{.Position = .{.x = 1, .y = 1}});
+    const result2 = try pool.addEntity(entity2, .{.Position = .{.x = 2, .y = 2}});
+    const result3 = try pool.addEntity(entity3, .{.Position = .{.x = 3, .y = 3}});
 
-    try testing.expectEqual(@as(u32, 0), idx1);
-    try testing.expectEqual(@as(u32, 1), idx2);
-    try testing.expectEqual(@as(u32, 2), idx3);
+    try testing.expectEqual(@as(u32, 0), result1.storage_index);
+    try testing.expectEqual(@as(u32, 1), result2.storage_index);
+    try testing.expectEqual(@as(u32, 2), result3.storage_index);
 
     // Remove middle entity
-    try pool.removeEntity(idx2);
+    try pool.removeEntity(result2.storage_index, SparsePool.NAME);
 
     // Verify entity2 is gone
-    try testing.expectEqual(@as(?EM.Entity, null), pool.storage.entities.items[idx2]);
-    try testing.expectError(error.EntityDoesNotHaveComponent, pool.getComponent(idx2, .Position));
+    try testing.expectEqual(@as(?EM.Entity, null), pool.storage.entities.items[result2.storage_index]);
+    try testing.expectError(error.EntityDoesNotHaveComponent, pool.getComponent(0, result2.storage_index, SparsePool.NAME, .Position));
 
     // Verify entity1 and entity3 still exist
-    _ = try pool.getComponent(idx1, .Position);
-    _ = try pool.getComponent(idx3, .Position);
+    _ = try pool.getComponent(0, result1.storage_index, SparsePool.NAME, .Position);
+    _ = try pool.getComponent(0, result3.storage_index, SparsePool.NAME, .Position);
 
-    // Add a new entity - should reuse slot 1 (idx2's old slot)
+    // Add a new entity - should reuse slot 1 (result2's old slot)
     const entity4 = EM.Entity{.index = 4, .generation = 0};
-    const idx4 = try pool.addEntity(entity4, .{.Position = .{.x = 4, .y = 4}});
+    const result4 = try pool.addEntity(entity4, .{.Position = .{.x = 4, .y = 4}});
 
-    try testing.expectEqual(idx2, idx4); // Should reuse the empty slot
+    try testing.expectEqual(result2.storage_index, result4.storage_index); // Should reuse the empty slot
 
-    const pos4 = try pool.getComponent(idx4, .Position);
+    const pos4 = try pool.getComponent(0, result4.storage_index, SparsePool.NAME, .Position);
     try testing.expectEqual(@as(f32, 4), pos4.x);
 }
 
@@ -558,26 +725,26 @@ test "Component modification through pointer" {
     defer pool.deinit();
 
     const entity = EM.Entity{.index = 1, .generation = 0};
-    const idx = try pool.addEntity(entity, .{
+    const result = try pool.addEntity(entity, .{
         .Position = .{.x = 5, .y = 10},
         .Health = .{.current = 50, .max = 100}
     });
 
     // Get component and modify it
-    const pos = try pool.getComponent(idx, .Position);
+    const pos = try pool.getComponent(0, result.storage_index, SparsePool.NAME, .Position);
     pos.x = 100;
     pos.y = 200;
 
     // Verify changes persisted
-    const pos_check = try pool.getComponent(idx, .Position);
+    const pos_check = try pool.getComponent(0, result.storage_index, SparsePool.NAME, .Position);
     try testing.expectEqual(@as(f32, 100), pos_check.x);
     try testing.expectEqual(@as(f32, 200), pos_check.y);
 
     // Modify health
-    const health = try pool.getComponent(idx, .Health);
+    const health = try pool.getComponent(0, result.storage_index, SparsePool.NAME, .Health);
     health.current = 25;
 
-    const health_check = try pool.getComponent(idx, .Health);
+    const health_check = try pool.getComponent(0, result.storage_index, SparsePool.NAME, .Health);
     try testing.expectEqual(@as(u32, 25), health_check.current);
 }
 
@@ -596,23 +763,23 @@ test "Multiple entities with same component set share bitmask" {
     const entity2 = EM.Entity{.index = 2, .generation = 0};
     const entity3 = EM.Entity{.index = 3, .generation = 0};
 
-    const idx1 = try pool.addEntity(entity1, .{
+    const result1 = try pool.addEntity(entity1, .{
         .Position = .{.x = 1, .y = 1},
         .Velocity = .{.dx = 1, .dy = 0}
     });
-    const idx2 = try pool.addEntity(entity2, .{
+    const result2 = try pool.addEntity(entity2, .{
         .Position = .{.x = 2, .y = 2},
         .Velocity = .{.dx = 0, .dy = 1}
     });
-    const idx3 = try pool.addEntity(entity3, .{
+    const result3 = try pool.addEntity(entity3, .{
         .Position = .{.x = 3, .y = 3},
         .Health = .{.current = 100, .max = 100}
     });
 
     // Check bitmask maps
-    const bm1 = pool.getBitmaskMap(idx1);
-    const bm2 = pool.getBitmaskMap(idx2);
-    const bm3 = pool.getBitmaskMap(idx3);
+    const bm1 = pool.getBitmaskMap(result1.storage_index);
+    const bm2 = pool.getBitmaskMap(result2.storage_index);
+    const bm3 = pool.getBitmaskMap(result3.storage_index);
 
     // entity1 and entity2 have same components, should share bitmask_index
     try testing.expectEqual(bm1.bitmask_index, bm2.bitmask_index);
@@ -636,42 +803,42 @@ test "Add and remove components dynamically" {
     defer pool.deinit();
 
     const entity = EM.Entity{.index = 1, .generation = 0};
-    const idx = try pool.addEntity(entity, .{
+    const result = try pool.addEntity(entity, .{
         .Position = .{.x = 0, .y = 0}
     });
 
     // Track bitmask changes
-    const initial_bm = pool.getBitmaskMap(idx);
+    const initial_bm = pool.getBitmaskMap(result.storage_index);
 
     // Add velocity - should change bitmask
-    try pool.addComponent(idx, .Velocity, .{.dx = 5, .dy = 5});
-    const after_vel_bm = pool.getBitmaskMap(idx);
+    try pool.addComponent(result.storage_index, .Velocity, .{.dx = 5, .dy = 5});
+    const after_vel_bm = pool.getBitmaskMap(result.storage_index);
     try testing.expect(initial_bm.bitmask_index != after_vel_bm.bitmask_index);
 
     // Add health - should change bitmask again
-    try pool.addComponent(idx, .Health, .{.current = 100, .max = 100});
-    const after_health_bm = pool.getBitmaskMap(idx);
+    try pool.addComponent(result.storage_index, .Health, .{.current = 100, .max = 100});
+    const after_health_bm = pool.getBitmaskMap(result.storage_index);
     try testing.expect(after_vel_bm.bitmask_index != after_health_bm.bitmask_index);
 
     // Add attack
-    try pool.addComponent(idx, .Attack, .{.damage = 50, .crit_chance = 10});
+    try pool.addComponent(result.storage_index, .Attack, .{.damage = 50, .crit_chance = 10});
 
     // Verify all components exist
-    _ = try pool.getComponent(idx, .Position);
-    _ = try pool.getComponent(idx, .Velocity);
-    _ = try pool.getComponent(idx, .Health);
-    _ = try pool.getComponent(idx, .Attack);
+    _ = try pool.getComponent(0, result.storage_index, SparsePool.NAME, .Position);
+    _ = try pool.getComponent(0, result.storage_index, SparsePool.NAME, .Velocity);
+    _ = try pool.getComponent(0, result.storage_index, SparsePool.NAME, .Health);
+    _ = try pool.getComponent(0, result.storage_index, SparsePool.NAME, .Attack);
 
     // Now remove components one by one
-    try pool.removeComponent(idx, .Attack);
-    try testing.expectError(error.EntityDoesNotHaveComponent, pool.getComponent(idx, .Attack));
+    try pool.removeComponent(result.storage_index, .Attack);
+    try testing.expectError(error.EntityDoesNotHaveComponent, pool.getComponent(0, result.storage_index, SparsePool.NAME, .Attack));
 
-    try pool.removeComponent(idx, .Velocity);
-    try testing.expectError(error.EntityDoesNotHaveComponent, pool.getComponent(idx, .Velocity));
+    try pool.removeComponent(result.storage_index, .Velocity);
+    try testing.expectError(error.EntityDoesNotHaveComponent, pool.getComponent(0, result.storage_index, SparsePool.NAME, .Velocity));
 
     // Position and Health should still exist
-    _ = try pool.getComponent(idx, .Position);
-    _ = try pool.getComponent(idx, .Health);
+    _ = try pool.getComponent(0, result.storage_index, SparsePool.NAME, .Position);
+    _ = try pool.getComponent(0, result.storage_index, SparsePool.NAME, .Health);
 }
 
 test "SwapRemove correctly updates bitmask_map indices" {
@@ -689,23 +856,23 @@ test "SwapRemove correctly updates bitmask_map indices" {
     const entity2 = EM.Entity{.index = 2, .generation = 0};
     const entity3 = EM.Entity{.index = 3, .generation = 0};
 
-    const idx1 = try pool.addEntity(entity1, .{
+    const result1 = try pool.addEntity(entity1, .{
         .Position = .{.x = 1, .y = 1},
         .Velocity = .{.dx = 1, .dy = 0}
     });
-    const idx2 = try pool.addEntity(entity2, .{
+    const result2 = try pool.addEntity(entity2, .{
         .Position = .{.x = 2, .y = 2},
         .Velocity = .{.dx = 0, .dy = 1}
     });
-    const idx3 = try pool.addEntity(entity3, .{
+    const result3 = try pool.addEntity(entity3, .{
         .Position = .{.x = 3, .y = 3},
         .Velocity = .{.dx = 1, .dy = 1}
     });
 
     // All should share the same bitmask
-    const bm1 = pool.getBitmaskMap(idx1);
-    const bm2 = pool.getBitmaskMap(idx2);
-    const bm3 = pool.getBitmaskMap(idx3);
+    const bm1 = pool.getBitmaskMap(result1.storage_index);
+    const bm2 = pool.getBitmaskMap(result2.storage_index);
+    const bm3 = pool.getBitmaskMap(result3.storage_index);
 
     try testing.expectEqual(bm1.bitmask_index, bm2.bitmask_index);
     try testing.expectEqual(bm1.bitmask_index, bm3.bitmask_index);
@@ -715,20 +882,68 @@ test "SwapRemove correctly updates bitmask_map indices" {
     try testing.expectEqual(@as(u32, 1), bm2.in_list_index);
     try testing.expectEqual(@as(u32, 2), bm3.in_list_index);
 
-    // Remove the middle entity (idx2) - this should swap idx3 into idx2's position
-    try pool.removeEntity(idx2);
+    // Remove the middle entity (result2) - this should swap result3 into result2's position
+    try pool.removeEntity(result2.storage_index, SparsePool.NAME);
 
-    // idx3 should now have in_list_index of 1 (swapped into idx2's old spot)
-    const bm3_after = pool.getBitmaskMap(idx3);
+    // result3 should now have in_list_index of 1 (swapped into result2's old spot)
+    const bm3_after = pool.getBitmaskMap(result3.storage_index);
     try testing.expectEqual(@as(u32, 1), bm3_after.in_list_index);
 
-    // idx1 should be unchanged
-    const bm1_after = pool.getBitmaskMap(idx1);
+    // result1 should be unchanged
+    const bm1_after = pool.getBitmaskMap(result1.storage_index);
     try testing.expectEqual(@as(u32, 0), bm1_after.in_list_index);
 
     // Verify the storage_indexes list is correct
     const mask_entry = pool.masks.items[bm1.bitmask_index];
     try testing.expectEqual(@as(usize, 2), mask_entry.storage_indexes.items.len);
-    try testing.expectEqual(idx1, mask_entry.storage_indexes.items[0]);
-    try testing.expectEqual(idx3, mask_entry.storage_indexes.items[1]);
+    try testing.expectEqual(result1.storage_index, mask_entry.storage_indexes.items[0]);
+    try testing.expectEqual(result3.storage_index, mask_entry.storage_indexes.items[1]);
+}
+
+test "Migration queue flush" {
+    const allocator = testing.allocator;
+    const SparsePool = SparseSetPoolType(.{
+        .name = .GeneralPool,
+        .req = null,
+        .opt = &.{.Position, .Velocity}
+    });
+    var pool = SparsePool.init(allocator);
+    defer pool.deinit();
+
+    const entity = EM.Entity{.index = 0, .generation = 0};
+    const result = try pool.addEntity(entity, .{.Position = .{.x = 3, .y = 2}});
+
+    // Get mask before adding component
+    const bm_before = pool.getBitmaskMap(result.storage_index);
+    const mask_before = pool.masks.items[bm_before.bitmask_index].mask;
+
+    // Queue a component add via migration queue
+    try pool.addOrRemoveComponent(
+        entity,
+        result.archetype_index,
+        SparsePool.NAME,
+        result.storage_index,
+        false,
+        .adding,
+        .Velocity,
+        .{.dx = 1, .dy = 1}
+    );
+
+    // Flush the migration queue
+    const results = try pool.flushMigrationQueue();
+    defer allocator.free(results);
+
+    // Verify migration result
+    try testing.expectEqual(@as(usize, 1), results.len);
+    try testing.expect(std.meta.eql(results[0].entity, entity));
+
+    // Verify mask changed after flush
+    const bm_after = pool.getBitmaskMap(result.storage_index);
+    const mask_after = pool.masks.items[bm_after.bitmask_index].mask;
+    try testing.expect(mask_before != mask_after);
+
+    // Verify component is accessible
+    const vel = try pool.getComponent(0, result.storage_index, SparsePool.NAME, .Velocity);
+    try testing.expectEqual(@as(f32, 1), vel.dx);
+    try testing.expectEqual(@as(f32, 1), vel.dy);
 }

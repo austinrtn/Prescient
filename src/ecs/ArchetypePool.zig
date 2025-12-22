@@ -323,7 +323,7 @@ pub fn ArchetypePoolType(comptime config: PoolConfig) type {
             entity: Entity,
             mask_list_index: u32,
             pool_name: PR.PoolName,
-            archetype_index: u32,
+            storage_index: u32,
             is_migrating: bool,
             comptime direction: MoveDirection,
             comptime component: CR.ComponentName,
@@ -369,7 +369,7 @@ pub fn ArchetypePoolType(comptime config: PoolConfig) type {
 
                 try self.migration_queue.addMigration(
                     entity,
-                    archetype_index,
+                    storage_index,
                     entity_mask,
                     new_mask,
                     .adding,
@@ -391,7 +391,7 @@ pub fn ArchetypePoolType(comptime config: PoolConfig) type {
 
                 try self.migration_queue.addMigration(
                     entity,
-                    archetype_index,
+                    storage_index,
                     entity_mask,
                     new_mask,
                     .removing,
@@ -432,7 +432,7 @@ pub fn ArchetypePoolType(comptime config: PoolConfig) type {
                     .entity = entity,
                     .entries = entries,
                     .old_mask = first_entry.old_mask,
-                    .archetype_index = first_entry.archetype_index,
+                    .archetype_index = first_entry.storage_index,
                 });
             }
 
@@ -496,7 +496,7 @@ pub fn ArchetypePoolType(comptime config: PoolConfig) type {
 
                 try results.append(self.allocator, MigrationResult{
                     .entity = entity,
-                    .archetype_index = move_result.archetype_index,
+                    .storage_index = move_result.archetype_index,
                     .swapped_entity = move_result.swapped_entity,
                     .mask_list_index = @intCast(dest_index),
                 });

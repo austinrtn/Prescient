@@ -91,15 +91,24 @@ pub fn PoolInterfaceType(comptime pool_name: PR.PoolName) type {
 
             for (results) |result| {
                 const slot = try self.entity_manager.getSlot(result.entity);
-                slot.storage_index = result.archetype_index;
-                slot.mask_list_index = result.mask_list_index;
-                slot.is_migrating = false;
 
-                // Update swapped entity's storage index if a swap occurred
-                if (result.swapped_entity) |swapped| {
-                    const swapped_slot = try self.entity_manager.getSlot(swapped);
-                    swapped_slot.storage_index = slot.storage_index;
+                // Comptime dispatch based on pool type
+                if (@hasField(@TypeOf(result), "swapped_entity")) {
+                    // ArchetypePool: storage_index changes, handle swapped entity
+                    slot.storage_index = result.storage_index;
+                    slot.mask_list_index = result.mask_list_index;
+
+                    // Update swapped entity's storage index if a swap occurred
+                    if (result.swapped_entity) |swapped| {
+                        const swapped_slot = try self.entity_manager.getSlot(swapped);
+                        swapped_slot.storage_index = slot.storage_index;
+                    }
+                } else {
+                    // SparseSetPool: storage_index is stable, just update mask info
+                    slot.mask_list_index = result.bitmask_index;
                 }
+
+                slot.is_migrating = false;
             }
         }
     };
