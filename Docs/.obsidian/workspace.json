@@ -13,13 +13,50 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Architecture Decision Records/ADR 001 - Entity Pools.md",
+                "file": "Architecture/1.02 - PoolConfig.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "ADR 001 - Entity Pools"
+              "title": "1.02 - PoolConfig"
             }
+          },
+          {
+            "id": "df3af0323000eb1f",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Architecture/1.06 - Storage Strategy (Architecture).md",
+                "mode": "source",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "1.06 - Storage Strategy (Architecture)"
+            },
+            "group": "a0d22c6537cca849"
+          }
+        ],
+        "currentTab": 1
+      },
+      {
+        "id": "60e47fac4a15a04a",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "d3c87dab21b6d9ae",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Architecture/1.06 - Storage Strategy (Architecture).md",
+                "mode": "preview",
+                "source": true
+              },
+              "icon": "lucide-file",
+              "title": "1.06 - Storage Strategy (Architecture)"
+            },
+            "group": "a0d22c6537cca849"
           }
         ]
       }
@@ -183,34 +220,43 @@
       "bases:Create new base": false
     }
   },
-  "active": "2dfa0c7be9e9b4d0",
+  "active": "df3af0323000eb1f",
   "lastOpenFiles": [
-    "Architecture Decision Records/ADR 004 - Hybrid Entity Storage (Archetype & Sparse Set).md",
-    "Architecture Decision Records/ADR 003 - Pool Registry & Pool Manager.md",
-    "Architecture Decision Records/ADR 002 - General Entity Pool (General Pool).md",
-    "Architecture/1.03 - General Pool.md",
-    "Architecture/1.02 - PoolConfig.md",
-    "Component Registry.md",
+    "Archive/Architecture Decision Records/ADR 004 - Hybrid Entity Storage (Archetype & Sparse Set).md",
+    "Archive/Architecture Decision Records/ADR 003 - Pool Registry & Pool Manager.md",
+    "Archive/Architecture Decision Records/ADR 002 - General Entity Pool (General Pool).md",
+    "Archive/Architecture Decision Records/ADR 001 - Entity Pools.md",
+    "Archive/Architecture/1.c Pool Examples.md",
+    "Archive/Architecture/1.07 - Pool Registry.md",
+    "Archive/Architecture/1.06 - Storage Strategy (Architecture).md",
+    "Archive/Architecture/1.05- Storage Strategy (Summary & Usage).md",
+    "Archive/Architecture/1.04 - General Pool.md",
+    "Archive/Architecture/1.03 - Using Pools.md",
+    "Archive/Architecture/1.02 - PoolConfig.md",
+    "Archive/Architecture/1.01 - Creating Entity Pools.md",
+    "Archive/Architecture/1.00 - Entity Pools.md",
+    "Archive/Architecture/0.00 - INDEX.md",
+    "Archive/Architecture Decision Records",
+    "Archive/Architecture",
+    "Archive",
+    "Architecture/1.06 - Storage Strategy (Architecture).md.tmp.1354.1766510741044",
+    "Architecture/1.03 - Using Pools.md",
     "Architecture/1.01 - Creating Entity Pools.md",
-    "Architecture/1.04 - Storage Strategy (Summary & Usage).md",
-    "Architecture/1.05 - Storage Strategy (Architecture).md",
-    "Architecture/1.00 - Entity Pools.md",
-    "Architecture/1.15 - Pool Registry.md",
-    "Architecture/1.c Pool Examples.md",
+    "Architecture/1.06 - Storage Strategy (Architecture).md",
+    "Architecture/1.07 - Pool Registry.md",
+    "Architecture/1.05- Storage Strategy (Summary & Usage).md",
+    "Architecture/1.02 - PoolConfig.md.tmp.12046.1766449880118",
     "Architecture/0.00 - INDEX.md",
-    "1.01 - Creating Entity Pools.md",
-    "Architecture/1.01 Creating Entity Pools",
-    "Query Mapping.md",
-    "Sparse-Set.md",
-    "Archetype.md",
-    "Architecture/1.01 - Pool Configuration.md.tmp.8639.1765828254252",
-    "Architecture/1.01 - Pool Configuration.md.tmp.8639.1765828246188",
-    "Architecture/1.01 - Pool Configuration.md.tmp.8639.1765828245941",
-    "Architecture/1.01 - Pool Configuration.md.tmp.8639.1765828245724",
-    "Architecture/1.01 - Pool Configuration.md.tmp.8639.1765828245587",
-    "Architecture Decision Records/ADR 001 - Entity Pools.md",
-    "Deleteme.md",
-    "Architecture Decision Records",
-    "Architecture"
+    "Architecture/1.02 - PoolConfig.md",
+    "Architecture/1.04 - General Pool.md.tmp.12046.1766449853085",
+    "Architecture/0.00 - INDEX.md.tmp.12046.1766449838604",
+    "Architecture/1.05- Storage Strategy (Summary & Usage).md.tmp.12046.1766449838425",
+    "Architecture/1.03 - Using Pools.md.tmp.12046.1766449838228",
+    "Architecture/1.01 - Creating Entity Pools.md.tmp.12046.1766449838078",
+    "Architecture/1.c Pool Examples.md",
+    "Architecture/1.00 - Entity Pools.md",
+    "Architecture/1.04 - General Pool.md",
+    "Architecture Decision Records/ADR 003 - Pool Registry & Pool Manager.md",
+    "Architecture Decision Records/ADR 001 - Entity Pools.md"
   ]
 }
