@@ -10,7 +10,9 @@ const std = @import("std");
 const CR = @import("ComponentRegistry.zig");
 const MM = @import("MaskManager.zig");
 const EM = @import("EntityManager.zig");
-const PR = @import("PoolRegistry.zig");
+const PC = @import("PoolConfig.zig");
+const PoolConfig = PC.PoolConfig;
+const PoolName = PC.PoolName;
 const PoolInterfaceType = @import("PoolInterface.zig").PoolInterfaceType;
 const EB = @import("EntityBuilder.zig");
 const EntityBuilderType = EB.EntityBuilderType;
@@ -18,6 +20,7 @@ const MaskManager = MM.GlobalMaskManager;
 const MQ = @import("MigrationQueue.zig");
 const MoveDirection = MQ.MoveDirection;
 const MigrationResult = MQ.MigrationResult;
+const StorageStrategy = @import("StorageStrategy.zig").StorageStrategy;
 
 const ArrayList = std.ArrayList;
 const Entity = EM.Entity;
@@ -76,32 +79,26 @@ fn ComponentArrayStorageType(comptime pool_components: []const CR.ComponentName)
     });
 }
 
-pub const PoolConfig = struct {
-    name: PR.PoolName,
-    req: ?[]const CR.ComponentName = null,
-    opt: ?[]const CR.ComponentName = null,
-};
-
 pub fn ArchetypePoolType(comptime config: PoolConfig) type {
     const req = if(config.req) |req_comps| req_comps else &.{};
-    const opt = if(config.opt) |opt_comps| opt_comps else &.{};
+    const components_list = if(config.components) |comp| comp else &.{};
 
 
     const pool_components = comptime blk: {
-        if(req.len == 0 and opt.len == 0) {
+        if(req.len == 0 and components_list.len == 0) {
             @compileError("\nPool must contain at least one component!\n");
         }
 
-        if(req.len == 0 and opt.len > 0) {
-            break :blk opt;
+        if(req.len == 0 and components_list.len > 0) {
+            break :blk components_list;
         }
 
-        else if(req.len > 0 and opt.len == 0) {
+        else if(req.len > 0 and components_list.len == 0) {
             break :blk req;
         }
 
         else {
-            break :blk req ++ opt;
+            break :blk req ++ components_list;
         }
     };
 
@@ -119,16 +116,17 @@ pub fn ArchetypePoolType(comptime config: PoolConfig) type {
 
         pub const REQ_MASK = MaskManager.Comptime.createMask(req);
 
+        pub const storage_strategy: StorageStrategy = .ARCHETYPE;
         pub const COMPONENTS = pool_components;
         pub const REQ_COMPONENTS = req;
-        pub const OPT_COMPONENTS = opt;
+        pub const COMPONENTS_LIST = components_list;
         pub const NAME = name;
         pub const ARCHETYPE_STORAGE = archetype_storage;
 
         /// EntityBuilder type for creating entities in this pool
         /// Required components are non-optional fields
         /// Optional components are nullable fields with null defaults
-        pub const Builder = EntityBuilderType(req, opt);
+        pub const Builder = EntityBuilderType(req, components_list);
 
         pool_is_dirty: bool = false,
         allocator: std.mem.Allocator,
@@ -273,7 +271,7 @@ pub fn ArchetypePoolType(comptime config: PoolConfig) type {
             };
         }
 
-        pub fn removeEntity(self: *Self, mask_list_index: u32,  archetype_index: u32, pool_name: PR.PoolName) !Entity {
+        pub fn removeEntity(self: *Self, mask_list_index: u32,  archetype_index: u32, pool_name: PoolName) !Entity {
             try validateEntityInPool(pool_name);
             const mask_list_idx: usize = @intCast(mask_list_index);
             const entity_mask = self.mask_list[mask_list_idx];
@@ -302,7 +300,7 @@ pub fn ArchetypePoolType(comptime config: PoolConfig) type {
             self: *Self,
             mask_list_index: u32,
             storage_index: u32,
-            pool_name: PR.PoolName,
+            pool_name: PoolName,
             comptime component: CR.ComponentName) !*CR.getTypeByName(component) {
 
             validateComponentInPool(component);
@@ -322,7 +320,7 @@ pub fn ArchetypePoolType(comptime config: PoolConfig) type {
             self: *Self,
             entity: Entity,
             mask_list_index: u32,
-            pool_name: PR.PoolName,
+            pool_name: PoolName,
             storage_index: u32,
             is_migrating: bool,
             comptime direction: MoveDirection,
@@ -595,7 +593,7 @@ pub fn ArchetypePoolType(comptime config: PoolConfig) type {
             self.migration_queue.deinit();
         }
 
-        fn checkIfEntInPool(pool_name: PR.PoolName) bool {
+        fn checkIfEntInPool(pool_name: PoolName) bool {
             return pool_name == name;
         }
 
@@ -622,7 +620,7 @@ pub fn ArchetypePoolType(comptime config: PoolConfig) type {
             }
         }
 
-        fn validateEntityInPool(pool_name: PR.PoolName) !void {
+        fn validateEntityInPool(pool_name: PoolName) !void {
             if(!checkIfEntInPool(pool_name)){
                 std.debug.print("\nEntity assigned pool '{s}' does not match pool: {s}\n", .{@tagName(pool_name), @tagName(name)});
                 return error.EntityPoolMismatch;
@@ -651,8 +649,8 @@ test "flush" {
 
     const Pool = ArchetypePoolType(.{
         .name = .MovementPool,
-        .req = &.{},
-        .opt = &.{.Position, .Velocity}
+        .components = &.{ .Position, .Velocity },
+        .storage_strategy = .ARCHETYPE,
     });
     var pool = try Pool.init(allocator);
     defer pool.deinit();

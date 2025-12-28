@@ -79,7 +79,7 @@ pub fn getComponentsFromData(comptime pool_components: []const CR.ComponentName,
         var count: usize = 0;
 
         // Check all pool components directly (no need for stringToEnum)
-        // Note: Builder is generated from this pool's req + opt, so all fields are valid
+        // Note: Builder is generated from this pool's req + components, so all fields are valid
         for (pool_components) |comp| {
             const field_name = @tagName(comp);
             const field_info = for (std.meta.fields(builder)) |f| {

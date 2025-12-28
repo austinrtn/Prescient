@@ -145,7 +145,7 @@ test "flush" {
 //         movement_pool.deinit();
 //     }
 //
-//     const config = PoolConfig{ .req = &.{}, .opt = &.{.Position, .Velocity} };
+//     const config = PoolConfig{ .req = &.{}, .components =&.{.Position, .Velocity} };
 //     var interface = PoolInterface(config).init(&movement_pool, &entity_manager);
 //
 //     const entity1 = try interface.createEntity(.{
@@ -204,7 +204,7 @@ test "flush" {
 //         movement_pool.deinit();
 //     }
 //
-//     const config = PoolConfig{ .req = &.{}, .opt = &.{.Position, .Velocity} };
+//     const config = PoolConfig{ .req = &.{}, .components =&.{.Position, .Velocity} };
 //     var interface = PoolInterface(config).init(&movement_pool, &entity_manager);
 //
 //     const entity1 = try interface.createEntity(.{
@@ -229,7 +229,7 @@ test "flush" {
 //         movement_pool.deinit();
 //     }
 //
-//     const config = PoolConfig{ .req = &.{}, .opt = &.{.Position, .Velocity} };
+//     const config = PoolConfig{ .req = &.{}, .components =&.{.Position, .Velocity} };
 //     var interface = PoolInterface(config).init(&movement_pool, &entity_manager);
 //
 //     const entity1 = try interface.createEntity(.{
@@ -258,7 +258,7 @@ test "flush" {
 //         movement_pool.deinit();
 //     }
 //
-//     const config = PoolConfig{ .req = &.{}, .opt = &.{.Position, .Velocity} };
+//     const config = PoolConfig{ .req = &.{}, .components =&.{.Position, .Velocity} };
 //     var movement_interface = PoolInterface(config).init(&movement_pool, &entity_manager);
 //
 //     var entities: [3]EM.Entity = undefined;
@@ -296,8 +296,8 @@ test "flush" {
 //         all_pool.deinit();
 //     }
 //
-//     const movement_config = PoolConfig{ .req = &.{}, .opt = &.{.Position, .Velocity} };
-//     const all_config = PoolConfig{ .req = &.{}, .opt = &.{.Position, .Velocity, .Attack} };
+//     const movement_config = PoolConfig{ .req = &.{}, .components =&.{.Position, .Velocity} };
+//     const all_config = PoolConfig{ .req = &.{}, .components =&.{.Position, .Velocity, .Attack} };
 //     var movement_interface = PoolInterface(movement_config).init(&movement_pool, &entity_manager);
 //     var all_interface = PoolInterface(all_config).init(&all_pool, &entity_manager);
 //

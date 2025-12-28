@@ -5,7 +5,9 @@ const testing = std.testing;
 const CR = @import("ComponentRegistry.zig");
 const MM = @import("MaskManager.zig");
 const EM = @import("EntityManager.zig");
-const PR = @import("PoolRegistry.zig");
+const PC = @import("PoolConfig.zig");
+const PoolConfig = PC.PoolConfig;
+const PoolName = PC.PoolName;
 const MaskManager = @import("MaskManager.zig").GlobalMaskManager;
 const Entity = EM.Entity;
 const EB = @import("EntityBuilder.zig");
@@ -15,6 +17,7 @@ const MoveDirection = MQ.MoveDirection;
 const MigrationQueueType = MQ.MigrationQueueType;
 const MigrationEntryType = MQ.MigrationEntryType;
 const PoolInterfaceType = @import("PoolInterface.zig").PoolInterfaceType;
+const StorageStrategy = @import("StorageStrategy.zig").StorageStrategy;
 
 const BitmaskMap = struct { bitmask_index: u32, in_list_index: u32};
 
@@ -63,32 +66,25 @@ return @Type(.{
         },
     });
 }
-
-pub const PoolConfig = struct {
-    name: PR.PoolName,
-    req: ?[]const CR.ComponentName,
-    opt: ?[]const CR.ComponentName,
-};
-
 pub fn SparseSetPoolType(comptime config: PoolConfig) type {
     const req = if(config.req) |req_comps| req_comps else &.{};
-    const opt = if(config.opt) |opt_comps| opt_comps else &.{};
+    const components_list = if(config.components) |comp| comp else &.{};
 
     const pool_components = comptime blk: {
-        if(req.len == 0 and opt.len == 0) {
+        if(req.len == 0 and components_list.len == 0) {
             @compileError("\nPool must contain at least one component!\n");
         }
 
-        if(req.len == 0 and opt.len > 0) {
-            break :blk opt;
+        if(req.len == 0 and components_list.len > 0) {
+            break :blk components_list;
         }
 
-        else if(req.len > 0 and opt.len == 0) {
+        else if(req.len > 0 and components_list.len == 0) {
             break :blk req;
         }
 
         else {
-            break :blk req ++ opt;
+            break :blk req ++ components_list;
         }
     };
 
@@ -100,11 +96,12 @@ pub fn SparseSetPoolType(comptime config: PoolConfig) type {
         const Self = @This();
         pub const NAME = config.name;
         pub const pool_mask = POOL_MASK;
+        pub const storage_strategy: StorageStrategy = .SPARSE;
         pub const REQ_MASK = MaskManager.Comptime.createMask(req);
         pub const COMPONENTS = pool_components;
         pub const REQ_COMPONENTS = req;
-        pub const OPT_COMPONENTS = opt;
-        pub const Builder = EntityBuilderType(req, opt);
+        pub const COMPONENTS_LIST = components_list;
+        pub const Builder = EntityBuilderType(req, components_list);
 
         allocator: Allocator,
         storage: Storage,
@@ -206,7 +203,7 @@ pub fn SparseSetPoolType(comptime config: PoolConfig) type {
             };
         }
 
-        pub fn removeEntity(self: *Self, storage_index: u32, pool_name: PR.PoolName) !void {
+        pub fn removeEntity(self: *Self, storage_index: u32, pool_name: PoolName) !void {
             try validateEntityInPool(pool_name);
 
             const bitmask_map = self.getBitmaskMap(storage_index);
@@ -222,7 +219,7 @@ pub fn SparseSetPoolType(comptime config: PoolConfig) type {
             self: *Self,
             entity: Entity,
             _: u32, // mask_list_index - unused for SparseSetPool, kept for API uniformity
-            pool_name: PR.PoolName,
+            pool_name: PoolName,
             storage_index: u32,
             is_migrating: bool,
             comptime direction: MoveDirection,
@@ -412,7 +409,7 @@ pub fn SparseSetPoolType(comptime config: PoolConfig) type {
             self: *Self,
             _: u32, // mask_list_index - unused for SparseSetPool, kept for API uniformity
             storage_index: u32,
-            pool_name: PR.PoolName,
+            pool_name: PoolName,
             comptime component: CR.ComponentName
         ) !*CR.getTypeByName(component) {
             validateComponentInPool(component);
@@ -475,7 +472,7 @@ pub fn SparseSetPoolType(comptime config: PoolConfig) type {
             };
         }
 
-        fn checkIfEntInPool(pool_name: PR.PoolName) bool {
+        fn checkIfEntInPool(pool_name: PoolName) bool {
             return pool_name == NAME;
         }
 
@@ -502,7 +499,7 @@ pub fn SparseSetPoolType(comptime config: PoolConfig) type {
             }
         }
 
-        fn validateEntityInPool(pool_name: PR.PoolName) !void {
+        fn validateEntityInPool(pool_name: PoolName) !void {
             if(!checkIfEntInPool(pool_name)){
                 std.debug.print("\nEntity assigned pool '{s}' does not match pool: {s}\n", .{@tagName(pool_name), @tagName(NAME)});
                 return error.EntityPoolMismatch;
@@ -528,7 +525,7 @@ pub fn SparseSetPoolType(comptime config: PoolConfig) type {
 
 test "Basic - all optional components" {
     const allocator = testing.allocator;
-    const SparsePool = SparseSetPoolType(.{ .name = .GeneralPool, .req = null, .opt = std.meta.tags(CR.ComponentName)});
+    const SparsePool = SparseSetPoolType(.{ .name = .GeneralPool, .components = std.meta.tags(CR.ComponentName), .storage_strategy = .SPARSE });
     var pool = SparsePool.init(allocator);
     defer pool.deinit();
 
@@ -548,7 +545,7 @@ test "Pool with required components only" {
     const SparsePool = SparseSetPoolType(.{
         .name = .GeneralPool,
         .req = &.{.Position, .Health},
-        .opt = null
+        .storage_strategy = .SPARSE,
     });
     var pool = SparsePool.init(allocator);
     defer pool.deinit();
@@ -573,8 +570,9 @@ test "Pool with mixed required and optional components" {
     const allocator = testing.allocator;
     const SparsePool = SparseSetPoolType(.{
         .name = .GeneralPool,
-        .req = &.{.Position},
-        .opt = &.{.Velocity, .Health}
+        .req = &.{ .Position },
+        .components = &.{ .Velocity, .Health },
+        .storage_strategy = .SPARSE
     });
     var pool = SparsePool.init(allocator);
     defer pool.deinit();
@@ -608,8 +606,8 @@ test "Error: adding component that already exists" {
     const allocator = testing.allocator;
     const SparsePool = SparseSetPoolType(.{
         .name = .GeneralPool,
-        .req = null,
-        .opt = &.{.Position, .Health}
+        .components = &.{ .Position, .Health },
+        .storage_strategy = .SPARSE
     });
     var pool = SparsePool.init(allocator);
     defer pool.deinit();
@@ -630,8 +628,8 @@ test "Error: removing component that doesn't exist" {
     const allocator = testing.allocator;
     const SparsePool = SparseSetPoolType(.{
         .name = .GeneralPool,
-        .req = null,
-        .opt = &.{.Position, .Health}
+        .components = &.{ .Position, .Health },
+        .storage_strategy = .SPARSE
     });
     var pool = SparsePool.init(allocator);
     defer pool.deinit();
@@ -652,8 +650,8 @@ test "Error: getting component that doesn't exist" {
     const allocator = testing.allocator;
     const SparsePool = SparseSetPoolType(.{
         .name = .GeneralPool,
-        .req = null,
-        .opt = &.{.Position, .Velocity}
+        .components = &.{ .Position, .Velocity },
+        .storage_strategy = .SPARSE
     });
     var pool = SparsePool.init(allocator);
     defer pool.deinit();
@@ -674,8 +672,8 @@ test "Entity removal and slot reuse" {
     const allocator = testing.allocator;
     const SparsePool = SparseSetPoolType(.{
         .name = .GeneralPool,
-        .req = null,
-        .opt = &.{.Position, .Health}
+        .components = &.{ .Position, .Health },
+        .storage_strategy = .SPARSE
     });
     var pool = SparsePool.init(allocator);
     defer pool.deinit();
@@ -718,8 +716,8 @@ test "Component modification through pointer" {
     const allocator = testing.allocator;
     const SparsePool = SparseSetPoolType(.{
         .name = .GeneralPool,
-        .req = null,
-        .opt = &.{.Position, .Health}
+        .components = &.{ .Position, .Health },
+        .storage_strategy = .SPARSE
     });
     var pool = SparsePool.init(allocator);
     defer pool.deinit();
@@ -752,8 +750,8 @@ test "Multiple entities with same component set share bitmask" {
     const allocator = testing.allocator;
     const SparsePool = SparseSetPoolType(.{
         .name = .GeneralPool,
-        .req = null,
-        .opt = &.{.Position, .Velocity, .Health}
+        .components = &.{ .Position, .Velocity, .Health },
+        .storage_strategy = .SPARSE
     });
     var pool = SparsePool.init(allocator);
     defer pool.deinit();
@@ -796,8 +794,8 @@ test "Add and remove components dynamically" {
     const allocator = testing.allocator;
     const SparsePool = SparseSetPoolType(.{
         .name = .GeneralPool,
-        .req = null,
-        .opt = &.{.Position, .Velocity, .Health, .Attack}
+        .components = &.{ .Position, .Velocity, .Health, .Attack },
+        .storage_strategy = .SPARSE
     });
     var pool = SparsePool.init(allocator);
     defer pool.deinit();
@@ -845,8 +843,8 @@ test "SwapRemove correctly updates bitmask_map indices" {
     const allocator = testing.allocator;
     const SparsePool = SparseSetPoolType(.{
         .name = .GeneralPool,
-        .req = null,
-        .opt = &.{.Position, .Velocity}
+        .components = &.{ .Position, .Velocity },
+        .storage_strategy = .SPARSE
     });
     var pool = SparsePool.init(allocator);
     defer pool.deinit();
@@ -904,8 +902,8 @@ test "Migration queue flush" {
     const allocator = testing.allocator;
     const SparsePool = SparseSetPoolType(.{
         .name = .GeneralPool,
-        .req = null,
-        .opt = &.{.Position, .Velocity}
+        .components = &.{ .Position, .Velocity },
+        .storage_strategy = .SPARSE
     });
     var pool = SparsePool.init(allocator);
     defer pool.deinit();

@@ -8,180 +8,10 @@ const MaskManager = @import("MaskManager.zig").GlobalMaskManager;
 const EM = @import("EntityManager.zig");
 const PoolInterface = @import("PoolInterface.zig");
 const StructField = std.builtin.Type.StructField;
+const StorageStrategy = @import("StorageStrategy.zig").StorageStrategy;
+const QT = @import("QueryTypes.zig");
 
-// Determines how a pool's archetypes are accessed during query iteration
-const ArchetypeAccess = enum{
-    // All archetypes in the pool are guaranteed to match the query (all query components are required)
-    Direct,
-    // Archetypes must be individually checked since some query components are optional
-    Lookup,
-};
-
-fn ArchetypeCacheType(comptime components: []const CR.ComponentName) type {
-    var fields: [components.len]StructField = undefined;
-    //~Field: CompName: []Component
-    for(components, 0..) |comp, i| {
-        const name = @tagName(comp);
-        const T = []CR.getTypeByName(comp);
-        fields[i] = StructField{
-            .name = name,
-            .type = T,
-            .alignment = @alignOf(T),
-            .default_value_ptr = null,
-            .is_comptime = false,
-        };
-    }
-
-    return @Type(.{
-        .@"struct" = .{
-            .fields = &fields,
-            .layout = .auto,
-            .is_tuple = false,
-            .backing_integer = null,
-            .decls = &.{},
-        }
-    });
-} 
-
-fn ArchElementType(comptime components: []const CR.ComponentName) type {
-    var fields: [4]StructField = undefined;
-    const default_arch_list = comptime ArrayList(usize){};
-    const arch_cache_arraylist = comptime ArrayList(ArchetypeCacheType(components));
-    const arch_cache_default = comptime arch_cache_arraylist{};
-
-    //~Field:pool_name: PoolName 
-    fields[0] = StructField{
-        .name = "pool_name",
-        .type = PR.PoolName,
-        .alignment = @alignOf(PR.PoolName),
-        .default_value_ptr = null,
-        .is_comptime = false,
-    };
-
-    //~Field:access: ArchAccess
-    fields[1] = StructField{
-        .name = "access",
-        .type = ArchetypeAccess,
-        .alignment = @alignOf(ArchetypeAccess),
-        .default_value_ptr = null,
-        .is_comptime = false,
-    };
-    
-    //~Field: archetype_indices: AL(usize)
-    fields[2] = StructField{
-        .name = "archetype_indices",
-        .type = ArrayList(usize),
-        .alignment = @alignOf(ArrayList(usize)),
-        .default_value_ptr = &default_arch_list,
-        .is_comptime = false,
-    };
-
-    //~Field: archetype_cache: AL(ArchCache)
-    fields[3] = StructField{
-        .name = "archetype_cache",
-        .type = arch_cache_arraylist,
-        .alignment = @alignOf(arch_cache_arraylist),
-        .is_comptime = false,
-        .default_value_ptr = &arch_cache_default,
-    };
-
-    return @Type(.{
-        .@"struct" = .{
-            .fields = &fields,
-            .layout = .auto,
-            .is_tuple = false,
-            .backing_integer = null,
-            .decls = &.{},
-        }
-    });
-}
-
-fn countMatchingPools(comptime components: []const CR.ComponentName) comptime_int {
-    var count: comptime_int = 0;
-
-    for(PR.pool_types) |pool_type| {
-        var query_match = true;
-        var req_match = true;
-
-        for(components) |component| {
-            const component_bit = MaskManager.Comptime.componentToBit(component);
-            const in_pool = MaskManager.maskContains(pool_type.pool_mask, component_bit);
-
-            if(!in_pool) {
-                query_match = false;
-                req_match = false;
-                break;
-            }
-
-            if(req_match) {
-                const contained_in_req = MaskManager.maskContains(pool_type.REQ_MASK, component_bit);
-                if(!contained_in_req) {
-                    req_match = false;
-                }
-            }
-        }
-
-        if(req_match or query_match) {
-            count += 1;
-        }
-    }
-    return count;
-}
-
-fn findPoolElements(comptime components: []const CR.ComponentName) [countMatchingPools(components)]ArchElementType(components) {
-    const PoolElement = ArchElementType(components);
-    const count = countMatchingPools(components);
-    var pool_elements: [count]PoolElement = undefined;
-    var idx: usize = 0;
-
-    // Check each registered pool type to see if it matches the query
-    for(PR.pool_types, 0..) |pool_type, i| {
-        // Assume the pool matches until proven otherwise
-        var query_match = true;  // All query components exist in pool (req OR opt)
-        var req_match = true;    // All query components exist in pool's REQ_MASK
-
-        // Check if all query components exist in this pool
-        for(components) |component| {
-            const component_bit = MaskManager.Comptime.componentToBit(component);
-            const in_pool = MaskManager.maskContains(pool_type.pool_mask, component_bit);
-
-            // If component doesn't exist in pool at all, this pool can't match
-            if(!in_pool) {
-                query_match = false;
-                req_match = false;
-                break;  // Skip to next pool
-            }
-
-            // Component exists in pool, but is it required or optional?
-            // Only check if we haven't already determined it's not a req_match
-            if(req_match) {
-                const contained_in_req = MaskManager.maskContains(pool_type.REQ_MASK, component_bit);
-                if(!contained_in_req) {
-                    // Component is optional, so we'll need Lookup access
-                    req_match = false;
-                }
-            }
-        }
-
-        const pool_name: PR.PoolName = @enumFromInt(i);
-
-        // Direct access: all query components are required in this pool
-        // Every archetype in the pool is guaranteed to have them
-        if(req_match) {
-            pool_elements[idx] = PoolElement{.pool_name = pool_name, .access = .Direct};
-            idx += 1;
-        }
-        // Lookup access: all query components exist but at least one is optional
-        // Need to check each archetype individually to see if it matches
-        else if(!req_match and query_match) {
-            pool_elements[idx] = PoolElement{.pool_name = pool_name, .access = .Lookup};
-            idx += 1;
-        }
-    }
-    return pool_elements;
-}
-
-fn QueryStorageType(
+fn QueryResultType(
     comptime PoolElement: type,
     comptime found_pool_elements: anytype,
     ) type {
@@ -209,8 +39,8 @@ fn QueryStorageType(
     });
 }
 
-fn QueryStorage(comptime PoolElement: type, comptime found_pool_elements: anytype) QueryStorageType(PoolElement, found_pool_elements){
-    var storage: QueryStorageType(PoolElement, found_pool_elements) = undefined;
+fn QueryResult(comptime PoolElement: type, comptime found_pool_elements: anytype) QueryResultType(PoolElement, found_pool_elements){
+    var storage: QueryResultType(PoolElement, found_pool_elements) = undefined;
     for(found_pool_elements) |pool_element| {
         const field_name = @tagName(pool_element.pool_name);
         @field(storage, field_name) = pool_element;
@@ -225,12 +55,12 @@ fn QueryStorage(comptime PoolElement: type, comptime found_pool_elements: anytyp
 //
 
 pub fn QueryType(comptime components: []const CR.ComponentName) type {
-    const PoolElement = ArchElementType(components);
-    const found_pool_elements = comptime findPoolElements(components);
+    const PoolElement = QT.PoolElementType(components);
+    const found_pool_elements = comptime QT.findPoolElements(components);
     const POOL_COUNT = found_pool_elements.len;
 
-    const QStorageType = QueryStorageType(PoolElement, &found_pool_elements);
-    const QStorage = QueryStorage(PoolElement, &found_pool_elements);
+    const QResultType = QueryResultType(PoolElement, &found_pool_elements);
+    const QResult = QueryResult(PoolElement, &found_pool_elements);
 
     return struct {
         const Self = @This();
@@ -239,7 +69,7 @@ pub fn QueryType(comptime components: []const CR.ComponentName) type {
 
         allocator: std.mem.Allocator,
         pool_manager: *PM.PoolManager,
-        query_storage: QStorageType = QStorage,
+        query_storage: QResultType = QResult,
 
         pool_index: usize = 0,
         archetype_index: usize = 0,
@@ -251,17 +81,17 @@ pub fn QueryType(comptime components: []const CR.ComponentName) type {
             };
 
             // Initialize the ArrayLists in each pool element
-            inline for(std.meta.fields(QStorageType)) |field| {
+            inline for(std.meta.fields(QResultType)) |field| {
                 var pool_element = &@field(self.query_storage, field.name);
                 pool_element.archetype_indices = ArrayList(usize){};
-                pool_element.archetype_cache = ArrayList(ArchetypeCacheType(components)){};
+                pool_element.archetype_cache = ArrayList(QT.ArchetypeCacheType(components)){};
             }
 
             return self;
         }
 
         pub fn deinit(self: *Self) void {
-            inline for(std.meta.fields(QStorageType)) |field| {
+            inline for(std.meta.fields(QResultType)) |field| {
                 const pool_element = &@field(self.query_storage, field.name);
                 pool_element.archetype_indices.deinit(self.allocator);
                 pool_element.archetype_cache.deinit(self.allocator);
@@ -269,7 +99,7 @@ pub fn QueryType(comptime components: []const CR.ComponentName) type {
         }
 
         pub fn cacheArchetypesFromPools(self: *Self) !void {
-            inline for(std.meta.fields(QStorageType)) |field| {
+            inline for(std.meta.fields(QResultType)) |field| {
                 const pool_element = &@field(self.query_storage, field.name);
                 switch (pool_element.pool_name) {
                     inline else => |pool_name|{
@@ -297,13 +127,21 @@ pub fn QueryType(comptime components: []const CR.ComponentName) type {
             }
         }
 
-        ///Convert archetype storage into Query Struct and append it to query cache
         pub fn cache(self: *Self, pool_element: anytype, pool: anytype, archetype_index: usize, index_in_pool_elem: ?usize) !void {
-            const ArchCacheType = comptime ArchetypeCacheType(components);
+           if(pool_element.storage_strategy == .ARCHETYPE){ 
+               return self.cacheArchetype(pool_element, pool, archetype_index, index_in_pool_elem); 
+           }
+           else {
+               return self.cacheSparseSet(pool_element, pool, archetype_index, index_in_pool_elem);
+            }
+        }
+        ///Convert archetype storage into Query Struct and append it to query cache
+        fn cacheArchetype(self: *Self, pool_element: anytype, pool: anytype, archetype_index: usize, index_in_pool_elem: ?usize) !void {
+            const ArchCacheType = comptime QT.ArchetypeCacheType(components);
+            var archetype_cache: ArchCacheType = undefined;
             const storage = &pool.archetype_list.items[archetype_index];
 
             // Iterate over component fields in the PoolElement type
-            var archetype_cache:ArchCacheType = undefined;
             inline for(std.meta.fields(ArchCacheType)) |field| {
                 // Only process component fields (skip metadata fields)
                 // Only cache if this component exists in the archetype storage
@@ -324,11 +162,21 @@ pub fn QueryType(comptime components: []const CR.ComponentName) type {
             }
         }
 
-        pub fn next(self: *Self) ?ArchetypeCacheType(components){
+        fn cacheSparseSet(self: *Self, pool_element: anytype, pool: anytype, index_in_pool_elem: ?usize) !void {
+            const ArchCacheType = comptime QT.ArchetypeCacheType(components);
+            var archetype_cache: ArchCacheType = undefined;
+            const virtual_archetype = pool.masks.
+
+            inline for(std.meta.fields(ArchCacheType)) |field| {
+
+            }
+        }
+        
+        pub fn next(self: *Self) ?QT.ArchetypeCacheType(components){
             while(true){
                 switch(self.pool_index){
                     inline 0...(pool_count - 1) =>|i|{
-                        const field = std.meta.fields(QStorageType)[i];
+                        const field = std.meta.fields(QResultType)[i];
                         const pool_elem = &@field(self.query_storage, field.name);
 
                         if(pool_elem.archetype_cache.items.len > 0) {
