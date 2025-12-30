@@ -312,6 +312,22 @@ pub fn ArchetypePoolType(comptime config: PoolConfig) type {
             return &component_array.?.items[storage_index];
         }
 
+        pub fn hasComponent(
+            self: *Self,
+            mask_list_index: u32,
+            pool_name: PoolName,
+            comptime component: CR.ComponentName) !bool {
+            
+            validateComponentInPool(component);
+            try validateEntityInPool(pool_name);
+
+            const mask_list_idx: usize = @intCast(mask_list_index);
+            const entity_mask = self.mask_list.items[mask_list_idx];
+            
+            const component_bit = MaskManager.Comptime.componentToBit(component);
+            return MaskManager.maskContains(entity_mask, component_bit);
+        }
+
         pub fn addOrRemoveComponent(
             self: *Self,
             entity: Entity,

@@ -696,6 +696,7 @@ pub fn SparseSetPoolType(comptime config: PoolConfig) type {
         /// ## Errors
         /// - `EntityPoolMismatch`: If pool_name doesn't match
         /// - `EntityDoesNotHaveComponent`: If entity doesn't have this component
+        ///
         pub fn getComponent(
             self: *Self,
             _: u32, // mask_list_index - unused for SparseSetPool, kept for API uniformity
@@ -714,6 +715,21 @@ pub fn SparseSetPoolType(comptime config: PoolConfig) type {
             }
         }
 
+        pub fn hasComponent(
+            self: *Self,
+            mask_list_index: u32,
+            pool_name: PoolName,
+            comptime component: CR.ComponentName) !bool {
+            
+            validateComponentInPool(component);
+            try validateEntityInPool(pool_name);
+
+            const mask_list_idx: usize = @intCast(mask_list_index);
+            const entity_mask = self.mask_list.items[mask_list_idx];
+            
+            const component_bit = MaskManager.Comptime.componentToBit(component);
+            return MaskManager.maskContains(entity_mask, component_bit);
+        }
         // ===== Internal Helpers =====
 
         /// Retrieves the bitmask map for an entity at the given storage index.

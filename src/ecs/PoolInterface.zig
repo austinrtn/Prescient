@@ -55,6 +55,11 @@ pub fn PoolInterfaceType(comptime pool_name: PR.PoolName) type {
             return self.pool.getComponent(entity_slot.mask_list_index, entity_slot.storage_index, entity_slot.pool_name, component);
         }
 
+        pub fn hasComponent(self: *Self, entity: EM.Entity, comptime component: CR.ComponentName) !bool {
+            const entity_slot = try self.entity_manager.getSlot(entity);
+            return self.pool.hasComponent(entity_slot.mask_list_index, entity_slot.pool_name, component);
+        }
+
         pub fn addComponent(self: *Self, entity: EM.Entity, comptime component: CR.ComponentName, data: CR.getTypeByName(component)) !void {
             const entity_slot = try self.entity_manager.getSlot(entity);
             try self.pool.addOrRemoveComponent(
@@ -133,6 +138,42 @@ test "flush" {
     try interface.flushMigrationQueue();
     const mask_after = movement_pool.mask_list.items[slot.mask_list_index];
     try testing.expect(mask_after == 3);
+}
+
+test "hasComponent" {
+    const allocator = testing.allocator;
+    var entity_manager = try EM.EntityManager.init(allocator);
+    var pool_manager = PM.PoolManager.init(allocator);
+    const movement_pool = try pool_manager.getOrCreatePool(.MovementPool);
+    defer {
+        pool_manager.deinit();
+        entity_manager.deinit();
+    }
+    var interface = PoolInterfaceType(.MovementPool).init(movement_pool, &entity_manager);
+
+    const ent = try interface.createEntity(.{.Position = CR.Position{.x = 5, .y = 10}});
+
+    // Entity has Position
+    try testing.expect(try interface.hasComponent(ent, .Position) == true);
+
+    // Entity does not have Velocity yet
+    try testing.expect(try interface.hasComponent(ent, .Velocity) == false);
+
+    // Add Velocity and flush
+    try interface.addComponent(ent, .Velocity, .{.dx = 1, .dy = 2});
+    try interface.flushMigrationQueue();
+
+    // Now entity has both
+    try testing.expect(try interface.hasComponent(ent, .Position) == true);
+    try testing.expect(try interface.hasComponent(ent, .Velocity) == true);
+
+    // Remove Velocity and flush
+    try interface.removeComponent(ent, .Velocity);
+    try interface.flushMigrationQueue();
+
+    // Position still there, Velocity gone
+    try testing.expect(try interface.hasComponent(ent, .Position) == true);
+    try testing.expect(try interface.hasComponent(ent, .Velocity) == false);
 }
 //
 // test "create entity and add component" {

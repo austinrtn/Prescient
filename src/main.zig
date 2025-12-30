@@ -6,7 +6,7 @@ pub fn main() !void {
     const allocator = gpa.allocator();
     defer _ = gpa.deinit();
 
-    var prescient = try Prescient.init(allocator);
+    const prescient = try Prescient.init(allocator);
     defer prescient.deinit();
 
     var pool = try prescient.getPool(.GeneralPool);
@@ -17,7 +17,7 @@ pub fn main() !void {
 
     while(true) {
         try prescient.update();        
-        const pos = try prescient.getEntityComponentData(ent1, .Position);
+        const pos = try prescient.ent.getEntityComponentData(ent1, .Position);
         const x = pos.x;
         std.debug.print("\n{}", .{x});
     }
