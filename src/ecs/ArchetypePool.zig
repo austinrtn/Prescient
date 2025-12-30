@@ -178,7 +178,7 @@ pub fn ArchetypePoolType(comptime config: PoolConfig) type {
 
         fn setArchetypeComponent(self: *Self, archetype: *archetype_storage, comptime component: CR.ComponentName, data: CR.getTypeByName(component)) !void{
             var component_array_ptr = @field(archetype.*, @tagName(component)).?;
-            if(component_array_ptr.items.len + 1 > component_array_ptr.items.len and !archetype.reallocating){
+            if(component_array_ptr.items.len + 1 > component_array_ptr.capacity and !archetype.reallocating){
                 archetype.reallocating = true;
                 try self.reallocated_archetypes.append(self.allocator, archetype.index);
             }
@@ -270,7 +270,7 @@ pub fn ArchetypePoolType(comptime config: PoolConfig) type {
         pub fn removeEntity(self: *Self, mask_list_index: u32,  archetype_index: u32, pool_name: PoolName) !Entity {
             try validateEntityInPool(pool_name);
             const mask_list_idx: usize = @intCast(mask_list_index);
-            const entity_mask = self.mask_list[mask_list_idx];
+            const entity_mask = self.mask_list.items[mask_list_idx];
             var archetype = &self.archetype_list.items[mask_list_idx];
 
             const swapped_entity = archetype.entities.items[archetype.entities.items.len - 1];
@@ -289,6 +289,13 @@ pub fn ArchetypePoolType(comptime config: PoolConfig) type {
                     }
                 }
             }
+
+            // Mark archetype for re-caching since swapRemove changed entity order
+            if (!archetype.reallocating) {
+                archetype.reallocating = true;
+                try self.reallocated_archetypes.append(self.allocator, mask_list_idx);
+            }
+
             return swapped_entity;
         }
 
@@ -490,6 +497,18 @@ pub fn ArchetypePoolType(comptime config: PoolConfig) type {
                     original_old_mask,
                     original_archetype_index,
                 );
+
+                // Mark both source and destination archetypes for re-caching
+                // Source: swapRemove changed entity order, invalidating cached pointer indices
+                // Destination: entity added, cached pointer arrays have wrong length
+                if (!src_archetype.reallocating) {
+                    src_archetype.reallocating = true;
+                    try self.reallocated_archetypes.append(self.allocator, src_index);
+                }
+                if (!dest_archetype.reallocating) {
+                    dest_archetype.reallocating = true;
+                    try self.reallocated_archetypes.append(self.allocator, dest_index);
+                }
 
                 // Step 3: Set - write component data for adds
                 for (entries.items) |entry| {

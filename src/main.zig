@@ -13,12 +13,20 @@ pub fn main() !void {
     var pool = try prescient.getPool(.GeneralPool);
     const ent1 = try pool.createEntity(.{
         .Position = .{.x = 5, .y = 6}, 
-        .Velocity = .{.dx = 3, .dy = 0}
     });
-    _ = ent1;
+    try prescient.ent.add(ent1, .Velocity, .{.dx = 1, .dy = 0});
 
+    var iter: usize = 0;
     while(true) {
         try prescient.update();        
+        std.debug.print("\niter:{}", .{iter});
+        iter += 1;
+        if(iter == 10) {
+            _ = try prescient.ent.hasComponent(ent1, .Velocity);
+        }
+        if(iter == 100) {
+            return;
+        }
     }
 }
 

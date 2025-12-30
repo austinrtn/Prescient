@@ -396,9 +396,10 @@ pub fn SparseSetPoolType(comptime config: PoolConfig) type {
         ///
         /// ## Errors
         /// - `EntityPoolMismatch`: If pool_name doesn't match this pool
-        pub fn removeEntity(self: *Self, storage_index: u32, pool_name: PoolName) !void {
+        pub fn removeEntity(self: *Self, _: u32, storage_index: u32, pool_name: PoolName) !Entity{
             try validateEntityInPool(pool_name);
 
+            const entity = self.storage.entities.items[storage_index] orelse return error.InvalidEntity;
             const bitmask_map = self.getBitmaskMap(storage_index);
 
             // Clear all storage slots for this entity
@@ -409,6 +410,8 @@ pub fn SparseSetPoolType(comptime config: PoolConfig) type {
             // Remove from virtual archetype and recycle storage index
             self.removeFromMaskList(bitmask_map);
             try self.empty_indexes.append(self.allocator, storage_index);
+
+            return entity;
         }
 
         /// Queues a component addition or removal for deferred processing.

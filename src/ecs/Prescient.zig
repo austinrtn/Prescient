@@ -98,46 +98,94 @@ pub const Ent = struct {
         return self;
     }
 
-    pub fn add() !void {
+    pub fn add(self: *Self, entity: EM.Entity, comptime component: CR.ComponentName, data: CR.getTypeByName(component)) !void {
+        return self.handleFunctionCall(entity, data, struct {
 
+            pub fn run(namespace: *Self, ent: EM.Entity, comptime pool_name: PR.PoolName, value: anytype) !void {
+                const pool = try namespace._pool_manager.getOrCreatePool(pool_name);
+                var pool_interface = pool.getInterface(namespace._entity_manager);
+                if(comptime PR.poolHasComponent(pool_name, component))
+                    try pool_interface.addComponent(ent, component, value);
+            }
+        });
     }
 
-    pub fn remove() !void {
+    pub fn remove(self: *Self, entity: EM.Entity, comptime component: CR.ComponentName) !void {
+        return self.handleFunctionCall(entity, null, struct {
 
+            pub fn run(namespace: *Self, ent: EM.Entity, comptime pool_name: PR.PoolName, data: anytype) !void {
+                _ = data;
+                const pool = try namespace._pool_manager.getOrCreatePool(pool_name);
+                var pool_interface = pool.getInterface(namespace._entity_manager);
+                if(comptime PR.poolHasComponent(pool_name, component))
+                    try pool_interface.removeComponent(ent, component);
+            }
+        });
     }
 
-    pub fn destroy() !void {
+    pub fn destroy(self: *Self, entity: EM.Entity) !void {
+        return self.handleFunctionCall(entity, null, struct {
 
+            pub fn run(namespace: *Self, ent: EM.Entity, comptime pool_name: PR.PoolName, data: anytype) !void {
+                _ = data;
+                const pool = try namespace._pool_manager.getOrCreatePool(pool_name);
+                var pool_interface = pool.getInterface(namespace._entity_manager);
+                try pool_interface.destroyEntity(ent);
+            }
+        });
     }
 
-    pub fn hasComponent() !bool {
-
-    }
-
-    pub fn getEntityComponentData(self: *Self, entity: EM.Entity, comptime component: CR.ComponentName) !*CR.getTypeByName(component) {
+    pub fn hasComponent(self: *Self, entity: EM.Entity, comptime component: CR.ComponentName) !bool {
         const slot = try self._entity_manager.getSlot(entity);
 
-        // Use inline for with comptime conditional to eliminate dead code paths
         inline for (std.meta.fields(PR.PoolName)) |field| {
             const pool_name: PR.PoolName = @enumFromInt(field.value);
 
             if (slot.pool_name == pool_name) {
                 const pool = try self._pool_manager.getOrCreatePool(pool_name);
+                var pool_interface = pool.getInterface(self._entity_manager);
 
-                // Only compile getComponent call if this pool has the component
                 if (comptime PR.poolHasComponent(pool_name, component)) {
-                    return pool.getComponent(
-                        slot.mask_list_index,
-                        slot.storage_index,
-                        slot.pool_name,
-                        component,
-                    );
+                    return try pool_interface.hasComponent(entity, component);
                 } else {
-                    return error.ComponentNotInPool;
+                    return false;
                 }
             }
         }
 
+        unreachable;
+    }
+
+    pub fn getEntityComponentData(self: *Self, entity: EM.Entity, comptime component: CR.ComponentName) !*CR.getTypeByName(component) {
+        const slot = try self._entity_manager.getSlot(entity);
+
+        inline for (std.meta.fields(PR.PoolName)) |field| {
+            const pool_name: PR.PoolName = @enumFromInt(field.value);
+
+            if (slot.pool_name == pool_name) {
+                const pool = try self._pool_manager.getOrCreatePool(pool_name);
+                var pool_interface = pool.getInterface(self._entity_manager);
+
+                if (comptime PR.poolHasComponent(pool_name, component)) {
+                    return try pool_interface.getComponent(entity, component);
+                }             
+            }
+        }
+
+        unreachable;
+    }
+
+    fn handleFunctionCall(self: *Self, entity: EM.Entity, data: anytype, func: anytype) !void {
+        const slot = try self._entity_manager.getSlot(entity);
+
+        inline for (std.meta.fields(PR.PoolName)) |field| {
+            const pool_name: PR.PoolName = @enumFromInt(field.value);
+
+            if (slot.pool_name == pool_name) {
+                try func.run(self, entity, pool_name, data);
+                return;
+            }
+        }
         unreachable;
     }
 };
