@@ -1,6 +1,7 @@
 const std = @import("std");
 const Prescient = @import("ecs/Prescient.zig").Prescient;
 const eb = @import("ecs/EntityBuilder.zig").EntityBuilderType;
+
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
@@ -14,12 +15,10 @@ pub fn main() !void {
         .Position = .{.x = 5, .y = 6}, 
         .Velocity = .{.dx = 3, .dy = 0}
     });
+    _ = ent1;
 
     while(true) {
         try prescient.update();        
-        const pos = try prescient.ent.getEntityComponentData(ent1, .Position);
-        const x = pos.x;
-        std.debug.print("\n{}", .{x});
     }
 }
 

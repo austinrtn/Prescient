@@ -11,6 +11,13 @@ const PoolInterface = PI.PoolInterfaceType;
 
 pub const Prescient = struct {
     const Self = @This();
+    var _Prescient: *Self = undefined;
+    var _initiated: bool = false;
+
+    pub fn getPrescient() !*Self {
+        if(!_initiated) return error.PrescientNotInitiated;
+        return _Prescient;
+    }
 
     _allocator: std.mem.Allocator,
     _entity_manager: EM.EntityManager,
@@ -33,8 +40,10 @@ pub const Prescient = struct {
             ._pool_manager = pool_manager,
             ._system_manager = system_manager,
         };
-
         self.ent = Ent.init(allocator, &self._entity_manager, pool_manager, &self._system_manager);
+
+        _initiated = true;
+        _Prescient = self;
 
         return self;
     }
@@ -87,6 +96,22 @@ pub const Ent = struct {
         };
 
         return self;
+    }
+
+    pub fn add() !void {
+
+    }
+
+    pub fn remove() !void {
+
+    }
+
+    pub fn destroy() !void {
+
+    }
+
+    pub fn hasComponent() !bool {
+
     }
 
     pub fn getEntityComponentData(self: *Self, entity: EM.Entity, comptime component: CR.ComponentName) !*CR.getTypeByName(component) {

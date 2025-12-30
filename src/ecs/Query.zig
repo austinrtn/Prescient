@@ -128,26 +128,32 @@ pub fn QueryType(comptime components: []const CR.ComponentName) type {
             var archetype_cache: ArchCacheType = undefined;
             const storage = &pool.archetype_list.items[archetype_index];
 
-            // Build pointer arrays for each component
-            inline for(std.meta.fields(ArchCacheType)) |field| {
-                if (@hasField(@TypeOf(storage.*), field.name)) {
-                    const ComponentType = CR.getTypeByName(std.meta.stringToEnum(CR.ComponentName, field.name).?);
-                    const value_slice = @field(storage, field.name).?.items;
+            // Build entities slice
+            const entities_slice = storage.entities.items;
+            const entities_array = try self.allocator.alloc(EM.Entity, entities_slice.len);
+            @memcpy(entities_array, entities_slice);
+            archetype_cache.entities = entities_array;
 
-                    // Allocate pointer array
-                    const ptr_array = try self.allocator.alloc(*ComponentType, value_slice.len);
-                    for (value_slice, 0..) |*item, idx| {
-                        ptr_array[idx] = item;
-                    }
-                    @field(archetype_cache, field.name) = ptr_array;
+            // Build pointer arrays for each component
+            inline for(components) |comp| {
+                const field_name = @tagName(comp);
+                const ComponentType = CR.getTypeByName(comp);
+                const value_slice = @field(storage, field_name).?.items;
+
+                // Allocate pointer array
+                const ptr_array = try self.allocator.alloc(*ComponentType, value_slice.len);
+                for (value_slice, 0..) |*item, idx| {
+                    ptr_array[idx] = item;
                 }
+                @field(archetype_cache, field_name) = ptr_array;
             }
 
             if(index_in_pool_elem) |indx|{
                 // Re-caching existing archetype - free old pointer arrays first
                 const old_cache = pool_element.archetype_cache.items[indx];
-                inline for(std.meta.fields(ArchCacheType)) |field| {
-                    self.allocator.free(@field(old_cache, field.name));
+                self.allocator.free(old_cache.entities);
+                inline for(components) |comp| {
+                    self.allocator.free(@field(old_cache, @tagName(comp)));
                 }
                 pool_element.archetype_cache.items[indx] = archetype_cache;
             }
@@ -208,6 +214,13 @@ pub fn QueryType(comptime components: []const CR.ComponentName) type {
                                 const storage_indexes = pool.virtual_archetypes.items[v_arch_index];
 
                                 var batch: QT.ArchetypeCacheType(components) = undefined;
+
+                                // Build entities slice
+                                const entities_array = self.allocator.alloc(EM.Entity, storage_indexes.items.len) catch unreachable;
+                                for (storage_indexes.items, 0..) |ent_index, idx| {
+                                    entities_array[idx] = pool.storage.entities.items[ent_index].?;
+                                }
+                                batch.entities = entities_array;
 
                                 inline for(components) |component| {
                                     const ComponentType = CR.getTypeByName(component);

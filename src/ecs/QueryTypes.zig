@@ -5,6 +5,7 @@ const PR = @import("PoolRegistry.zig");
 const StorageStrategy = @import("StorageStrategy.zig").StorageStrategy;
 const MaskManager = @import("MaskManager.zig").GlobalMaskManager;
 const StructField = std.builtin.Type.StructField;
+const Entity = @import("EntityManager.zig").Entity;
 
 // Determines how a pool's archetypes are accessed during query iteration
 pub const ArchetypeAccess = enum{
@@ -15,9 +16,20 @@ pub const ArchetypeAccess = enum{
 };
 
 pub fn ArchetypeCacheType(comptime components: []const CR.ComponentName) type {
-    var fields: [components.len]StructField = undefined;
+    // +1 for the entities field
+    var fields: [components.len + 1]StructField = undefined;
+
+    // First field: entities slice
+    fields[0] = StructField{
+        .name = "entities",
+        .type = []Entity,
+        .alignment = @alignOf([]Entity),
+        .default_value_ptr = null,
+        .is_comptime = false,
+    };
+
     //~Field: CompName: []*Component (pointer slices for unified archetype/sparse API)
-    for(components, 0..) |comp, i| {
+    for(components, 1..) |comp, i| {
         const name = @tagName(comp);
         const T = []*CR.getTypeByName(comp);
         fields[i] = StructField{

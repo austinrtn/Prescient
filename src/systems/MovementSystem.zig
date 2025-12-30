@@ -4,24 +4,29 @@ const Components = @import("../ecs/ComponentRegistry.zig").ComponentName;
 const Query = @import("../ecs/Query.zig").QueryType;
 const PoolManager = @import("../ecs/PoolManager.zig").PoolManager;
 const EntityManager = @import("../ecs/EntityManager.zig").EntityManager;
+const Prescient = @import("../ecs/Prescient.zig").Prescient;
 
 const Interface = @import("../ecs/PoolInterface.zig").PoolInterfaceType;
 
 pub const MovementSystem = struct {
     const Self = @This();
+
     allocator: std.mem.Allocator, 
     delta_time: f32 = 0.0,
-
     queries: struct {
         movement: Query(&.{Components.Position, Components.Velocity}), 
     },
 
     pub fn update(self: *Self) !void{
+        const prescient = try Prescient.getPrescient();
         try self.updateQueries();
         while(try self.queries.movement.next()) |batch| {
-            for(batch.Position, batch.Velocity) |pos, vel| {
+            for(batch.Position, batch.Velocity, batch.entities) |pos, vel, entity | {
                 pos.x += vel.dx;
                 pos.y += vel.dy;
+
+                const result = try prescient.ent.getEntityComponentData(entity, .Position);
+                std.debug.print("\n{any}", .{result});
             }
         }
     }
