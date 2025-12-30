@@ -7,6 +7,7 @@ const EM = @import("EntityManager.zig");
 const PM = @import("PoolManager.zig");
 const SM = @import("SystemManager.zig");
 const PI = @import("PoolInterface.zig");
+const Query = @import("Query.zig").QueryType;
 const PoolInterface = PI.PoolInterfaceType;
 
 pub const Prescient = struct {
@@ -78,6 +79,10 @@ pub const Prescient = struct {
 
     pub fn getSystem(self: *Self, comptime system: SR.SystemName) *SR.getTypeByName(system) {
         return self.system_manager.getSystem(system);
+    }
+
+    pub fn getQuery(self: *Self, comptime components: []const CR.ComponentName) Query(components) {
+        return Query(components).init(self.allocator, self.pool_manager);
     }
 };
 

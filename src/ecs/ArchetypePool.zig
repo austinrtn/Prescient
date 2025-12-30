@@ -128,7 +128,6 @@ pub fn ArchetypePoolType(comptime config: PoolConfig) type {
         /// Optional components are nullable fields with null defaults
         pub const Builder = EntityBuilderType(req, components_list);
 
-        pool_is_dirty: bool = false,
         allocator: std.mem.Allocator,
         archetype_list: ArrayList(archetype_storage),
         mask_list: ArrayList(MaskManager.Mask),
@@ -139,7 +138,6 @@ pub fn ArchetypePoolType(comptime config: PoolConfig) type {
 
         pub fn init(allocator: std.mem.Allocator) !Self {
             const self: Self = .{
-                .pool_is_dirty = false,
                 .allocator = allocator,
                 .archetype_list = ArrayList(archetype_storage){},
                 .mask_list = ArrayList(MaskManager.Mask){},
@@ -182,7 +180,6 @@ pub fn ArchetypePoolType(comptime config: PoolConfig) type {
             var component_array_ptr = @field(archetype.*, @tagName(component)).?;
             if(component_array_ptr.items.len + 1 > component_array_ptr.items.len and !archetype.reallocating){
                 archetype.reallocating = true;
-                self.pool_is_dirty = true;
                 try self.reallocated_archetypes.append(self.allocator, archetype.index);
             }
             try component_array_ptr.append(self.allocator, data);
@@ -208,7 +205,6 @@ pub fn ArchetypePoolType(comptime config: PoolConfig) type {
                 try self.mask_list.append(self.allocator, mask);
 
                 try self.new_archetypes.append(self.allocator, indx);
-                self.pool_is_dirty = true;
                 return indx;
             }
         }
@@ -559,14 +555,11 @@ pub fn ArchetypePoolType(comptime config: PoolConfig) type {
         }
 
         pub fn flushNewAndReallocatingLists(self: *Self) void {
-            if(!self.pool_is_dirty) return;
-
             for(self.reallocated_archetypes.items) |arch_indx|{
                  self.archetype_list.items[arch_indx].reallocating = false;
-            } 
+            }
             self.new_archetypes.clearRetainingCapacity();
             self.reallocated_archetypes.clearRetainingCapacity();
-            self.pool_is_dirty = false;
         }
 
         pub fn deinit(self: *Self) void {

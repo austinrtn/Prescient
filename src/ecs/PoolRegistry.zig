@@ -21,6 +21,12 @@ pub const MovementPool = EntityPool(.{
     .storage_strategy = .ARCHETYPE,
 });
 
+pub const UIPool = EntityPool(.{
+    .name = .UIPool,
+    .storage_strategy = .SPARSE,
+    .components = &.{.Position, .Sprite},
+});
+
 /// Enemy entities with combat and AI capabilities
 /// Required: (none)
 /// Optional: Position, Velocity, Attack, Health, AI
@@ -67,6 +73,7 @@ pub const pool_types = [_]type{
     PlayerPool,
     RenderablePool,
     CombatPool,
+    UIPool,
 };
 
 pub fn getPoolFromName(comptime pool: PoolName) type {

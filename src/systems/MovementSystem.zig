@@ -18,8 +18,8 @@ pub const MovementSystem = struct {
 
     pub fn update(self: *Self) !void{
         try self.updateQueries();
-        while(self.queries.movement.next()) |batch| {
-            for(batch.Position, batch.Velocity) |*pos, vel| {
+        while(try self.queries.movement.next()) |batch| {
+            for(batch.Position, batch.Velocity) |pos, vel| {
                 pos.x += vel.dx;
                 pos.y += vel.dy;
             }
@@ -49,7 +49,7 @@ pub const MovementSystem = struct {
 
     pub fn updateQueries(self: *Self) !void {
         inline for(std.meta.fields(@TypeOf(self.queries))) |field| {
-            try @field(self.queries, field.name).cacheArchetypesFromPools();
+            try @field(self.queries, field.name).update();
         }
     }
 };

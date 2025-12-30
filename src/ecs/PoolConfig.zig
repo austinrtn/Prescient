@@ -8,6 +8,7 @@ pub const PoolName = enum(u32) {
     PlayerPool,
     RenderablePool,
     CombatPool,
+    UIPool,
 };
 
 pub const PoolConfig = struct {
