@@ -57,7 +57,7 @@ pub const SystemManager = struct {
 
             @field(storage, @tagName(system)) = sys_instance;
             if(std.meta.hasFn(SystemType, "init")){
-                sys_instance.init();
+                try sys_instance.init();
             }
         }
         self.storage = storage;

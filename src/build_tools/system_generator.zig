@@ -56,22 +56,10 @@ pub fn main() !void {
         \\    allocator: std.mem.Allocator,
         \\    queries: struct {{
         \\        // Define your queries here
-        \\        // Example:
-        \\        // movement_query: Query(&.{{ ComponentRegistry.ComponentName.Position, ComponentRegistry.ComponentName.Velocity }}),
         \\    }},
         \\
         \\    pub fn update(self: *Self) !void {{
         \\        _ = self;
-        \\        // SystemManager automatically updates queries before calling this
-        \\        // Just iterate and process entities:
-        \\        //
-        \\        // while(try self.queries.movement_query.next()) |batch| {{
-        \\        //     for(batch.Position, batch.Velocity, batch.entities) |position, velocity, entity| {{
-        \\        //         _ = entity;
-        \\        //         position.x += velocity.dx;
-        \\        //         position.y += velocity.dy;
-        \\        //     }}
-        \\        // }}
         \\    }}
         \\}};
         \\
