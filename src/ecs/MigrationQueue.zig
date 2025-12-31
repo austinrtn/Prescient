@@ -7,7 +7,7 @@
 // This prevents stale storage_index bugs and ensures one move per entity per flush.
 
 const std = @import("std");
-const CR = @import("ComponentRegistry.zig");
+const CR = @import("../registries/ComponentRegistry.zig");
 const MM = @import("MaskManager.zig");
 const EM = @import("EntityManager.zig");
 

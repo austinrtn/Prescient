@@ -8,7 +8,7 @@
 //! while maintaining ergonomic entity creation syntax.
 
 const std = @import("std");
-const CR = @import("ComponentRegistry.zig");
+const CR = @import("../registries/ComponentRegistry.zig");
 
 /// Generate an EntityBuilder struct type for a specific component configuration
 ///

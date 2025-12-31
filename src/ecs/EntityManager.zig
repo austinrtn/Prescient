@@ -2,10 +2,10 @@ const std = @import("std");
 
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
-const ComponentRegistry = @import("ComponentRegistry.zig");
+const ComponentRegistry = @import("../registries/ComponentRegistry.zig");
 const ComponentName = ComponentRegistry.ComponentName;
 const getComponentByName = ComponentRegistry.GetComponentByName;
-const PoolName = @import("PoolRegistry.zig").PoolName;
+const PoolName = @import("../registries/PoolRegistry.zig").PoolName;
 
 pub const EntityManagerErrors = error{NoAvailableEntities};
 

@@ -1,8 +1,8 @@
 const std = @import("std");
 const AP = @import("ArchetypePool.zig");
-const PR = @import("PoolRegistry.zig");
+const PR = @import("../registries/PoolRegistry.zig");
 const PM = @import("PoolManager.zig");
-const CR = @import("ComponentRegistry.zig");
+const CR = @import("../registries/ComponentRegistry.zig");
 const MM = @import("MaskManager.zig");
 const EM = @import("EntityManager.zig");
 

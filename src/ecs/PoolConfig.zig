@@ -1,4 +1,4 @@
-const CR = @import("ComponentRegistry.zig");
+const CR = @import("../registries/ComponentRegistry.zig");
 const StorageStrategy = @import("StorageStrategy.zig").StorageStrategy;
 
 pub const PoolName = enum(u32) {

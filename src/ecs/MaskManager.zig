@@ -3,7 +3,7 @@
 //! Utilities for creating and manipulating component bitmasks.
 //! Provides both compile-time and runtime operations.
 const std = @import("std");
-const CR = @import("ComponentRegistry.zig");
+const CR = @import("../registries/ComponentRegistry.zig");
 
 pub fn MaskManagerType(comptime COMPONENTS: []const CR.ComponentName) type {
     const MaskType = comptime blk: {

@@ -1,0 +1,208 @@
+# Prescient ECS: Library Architecture Refactoring Plan
+# FUTURE IMPLEMENTATION - Saved for when ready to convert Prescient to a reusable library
+
+## Overview
+
+Transform Prescient from a monolithic application into a reusable library using comptime
+dependency injection while maintaining zero runtime overhead and full compile-time type safety.
+
+**Current Problem:** Library code in `src/ecs/` directly imports project-specific registries,
+preventing Prescient from being used as a dependency in other projects.
+
+**Solution:** Implement comptime dependency injection where consumers pass registry modules to
+`Prescient.init()`, which returns a fully-configured ECS namespace.
+
+## Architecture: Mixin Pattern
+
+Each library file exports a function that accepts registry types and returns a namespace with
+specialized types:
+
+```zig
+pub fn SomeMixin(comptime ComponentRegistry: type, ...) type {
+    return struct {
+        // Specialized types using ComponentRegistry
+        pub const SomeType = struct { ... };
+        pub fn someFunction() type { ... }
+    };
+}
+```
+
+## Consumer Usage (After Refactoring)
+
+```zig
+const std = @import("std");
+const PrescientLib = @import("Prescient");  // As a dependency
+
+const ECS = PrescientLib.init(.{
+    .ComponentRegistry = @import("registries/ComponentRegistry.zig"),
+    .SystemRegistry = @import("registries/SystemRegistry.zig"),
+    .PoolRegistry = @import("registries/PoolRegistry.zig"),
+});
+
+pub fn main() !void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    var prescient = try ECS.Prescient.init(allocator);
+    defer prescient.deinit();
+
+    try prescient.update();
+}
+```
+
+## Critical Files to Modify
+
+### Phase 1: Build Tools (Already completed in simpler implementation)
+- src/build_tools/registry_builder.zig
+- src/build_tools/system_generator.zig
+
+### Phase 2: Core Library Refactoring (13 files to convert to mixin pattern)
+- src/ecs/Prescient.zig - Complete redesign with init() function
+- src/ecs/PoolManager.zig - Convert to PoolManagerMixin(CR, PR)
+- src/ecs/SystemManager.zig - Convert to SystemManagerMixin(CR, SR, PR)
+- src/ecs/Query.zig - Convert to QueryMixin(CR, PR)
+- src/ecs/QueryTypes.zig - Convert to QueryTypesMixin(CR, PR)
+- src/ecs/EntityManager.zig - Convert to EntityManagerMixin(CR)
+- src/ecs/MaskManager.zig - Convert to MaskManagerMixin(CR)
+- src/ecs/EntityBuilder.zig - Convert to EntityBuilderMixin(CR)
+- src/ecs/PoolInterface.zig - Convert to PoolInterfaceMixin(CR, PR)
+- src/ecs/ArchetypePool.zig - Convert to ArchetypePoolMixin(CR, PR)
+- src/ecs/SparseSetPool.zig - Convert to SparseSetPoolMixin(CR, PR)
+- src/ecs/EntityPool.zig - Convert to EntityPoolMixin(CR, PR)
+- src/ecs/MigrationQueue.zig - Convert to MigrationQueueMixin(CR)
+
+## Implementation Phases
+
+### PHASE 1: Foundation Types (No dependencies on other mixins)
+
+1. MaskManager.zig → MaskManagerMixin(CR)
+2. EntityManager.zig → EntityManagerMixin(CR)
+3. EntityBuilder.zig → EntityBuilderMixin(CR)
+4. MigrationQueue.zig → MigrationQueueMixin(CR)
+
+**Strategy:** Add mixin functions while keeping backward compatibility exports using current
+registries. This allows incremental migration.
+
+### PHASE 2: Pool Storage Layer
+
+5. QueryTypes.zig → QueryTypesMixin(CR, PR)
+6. ArchetypePool.zig → ArchetypePoolMixin(CR, PR)
+7. SparseSetPool.zig → SparseSetPoolMixin(CR, PR)
+8. EntityPool.zig → EntityPoolMixin(CR, PR)
+
+**Challenge:** EntityPool needs to break circular dependency with PoolRegistry.
+
+**Solution:** PoolRegistry exports pool_configs (data only), Prescient.init() generates pool_types.
+
+### PHASE 3: Manager Layer
+
+9. Query.zig → QueryMixin(CR, PR)
+10. PoolInterface.zig → PoolInterfaceMixin(CR, PR)
+11. PoolManager.zig → PoolManagerMixin(CR, PR)
+12. SystemManager.zig → SystemManagerMixin(CR, SR, PR)
+
+### PHASE 4: Top-Level Orchestration
+
+13. Prescient.zig → Complete rewrite with init() function
+
+**Key Features:**
+- Validates registry structure at compile time
+- Generates pool_types from pool_configs
+- Returns namespace with all specialized types
+- Preserves existing Prescient API (init, deinit, update, getPool, getSystem)
+
+## Handling Circular Dependencies
+
+**Problem:** PoolRegistry needs pool types, but pool types need ComponentRegistry which
+PoolRegistry references.
+
+**Solution - Two-Phase Initialization:**
+
+1. PoolRegistry exports `pool_configs` (array of PoolConfig structs with data)
+2. Prescient.init() creates EntityPool mixin
+3. Prescient.init() generates `pool_types` array from pool_configs using EntityPool
+4. Enhanced PoolRegistry wrapper combines pool_configs + pool_types
+5. All other mixins use the enhanced PoolRegistry
+
+```zig
+// In generated PoolRegistry.zig (future structure):
+pub const pool_configs = [_]PoolConfig{
+    .{
+        .name = .GeneralPool,
+        .components = std.meta.tags(cr.ComponentName),
+        .storage_strategy = .ARCHETYPE,
+    },
+};
+// Note: pool_types is NOT here, generated later by Prescient.init()
+
+// In Prescient.init():
+const pool_types = blk: {
+    var types: [PR_Input.pool_configs.len]type = undefined;
+    for (PR_Input.pool_configs, 0..) |config, i| {
+        types[i] = EntityPoolNS.EntityPool(config);
+    }
+    break :blk types;
+};
+
+const EnhancedPR = struct {
+    pub const pool_types = pool_types;
+    pub const pool_configs = PR_Input.pool_configs;
+    pub fn getPoolFromName(comptime pool: PoolName) type {
+        return pool_types[@intFromEnum(pool)];
+    }
+    // ... other functions
+};
+```
+
+## Migration Strategy
+
+1. Convert files to mixin pattern with backward compatibility (Phases 1-3)
+2. Update Prescient.zig to support both patterns (Phase 4)
+3. Update consumer code (main.zig, systems) to use new pattern
+4. Remove backward compatibility exports
+5. Delete old registry files from src/ecs/
+
+## Key Architectural Benefits
+
+- **True Library:** Can be used as dependency in other projects
+- **Zero Runtime Cost:** All specialization happens at compile time
+- **Type Safety:** Invalid registry structures caught at compile time
+- **Flexibility:** Each project provides its own components/systems/pools
+- **Clean Separation:** Library provides infrastructure, projects provide data
+
+## Testing Strategy
+
+1. After each mixin conversion: Verify file compiles independently
+2. After backward compatibility: Old code still works
+3. After Prescient.init(): New pattern works
+4. After migration complete: Full build/test/run passes
+5. Create separate project to test as dependency
+
+## Success Criteria
+
+- [ ] All 13 library files converted to mixin pattern
+- [ ] Prescient.init() accepts and validates registry modules
+- [ ] Consumer code successfully uses dependency injection pattern
+- [ ] Build, test, and run all pass
+- [ ] Prescient successfully used as dependency in separate test project
+- [ ] Documentation updated with new usage pattern
+- [ ] Example project demonstrating library usage
+
+## Estimated Effort
+
+- Phase 1 (Foundation): ~4-6 hours
+- Phase 2 (Storage Layer): ~4-6 hours
+- Phase 3 (Managers): ~4-6 hours
+- Phase 4 (Prescient.zig): ~3-4 hours
+- Testing & Migration: ~3-4 hours
+- **Total: ~18-26 hours**
+
+This is a significant refactoring but provides long-term architectural benefits for code
+reusability and maintainability.
+
+---
+
+Generated: 2025-12-31
+Status: PLANNED - Not yet implemented
+Dependencies: Requires Phase 1 (registry folder restructuring) to be completed first

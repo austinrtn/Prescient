@@ -1,7 +1,7 @@
 // const std = @import("std");
-// const CR = @import("ComponentRegistry.zig");
+// const CR = @import("../registries/ComponentRegistry.zig");
 // const EM = @import("EntityManager.zig");
-// const PR = @import("PoolRegistry.zig");
+// const PR = @import("../registries/PoolRegistry.zig");
 // const AP = @import("ArchetypePool.zig");
 //
 // pub const ecs = struct {

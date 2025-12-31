@@ -1,5 +1,5 @@
 const std = @import("std");
-const SR = @import("SystemRegistry.zig");
+const SR = @import("../registries/SystemRegistry.zig");
 const PM = @import("PoolManager.zig");
 
 const SystemManagerStorage = blk: {

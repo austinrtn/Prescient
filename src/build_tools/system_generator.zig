@@ -46,34 +46,32 @@ pub fn main() !void {
     // Generate system template
     const template = try std.fmt.allocPrint(allocator,
         \\const std = @import("std");
-        \\const CR = @import("../ecs/ComponentRegistry.zig");
-        \\const Query = @import("../ecs/Query.zig");
+        \\const ComponentRegistry = @import("../registries/ComponentRegistry.zig");
+        \\const Query = @import("../ecs/Query.zig").QueryType;
+        \\const PoolManager = @import("../ecs/PoolManager.zig").PoolManager;
         \\
         \\pub const {s} = struct {{
         \\    const Self = @This();
         \\
-        \\    // Add your system state here
         \\    allocator: std.mem.Allocator,
-        \\
-        \\    pub fn init(allocator: std.mem.Allocator) Self {{
-        \\        return Self{{
-        \\            .allocator = allocator,
-        \\        }};
-        \\    }}
+        \\    queries: struct {{
+        \\        // Define your queries here
+        \\        // Example:
+        \\        // movement_query: Query(&.{{ ComponentRegistry.ComponentName.Position, ComponentRegistry.ComponentName.Velocity }}),
+        \\    }},
         \\
         \\    pub fn update(self: *Self) !void {{
         \\        _ = self;
-        \\        // Query for entities with specific components
-        \\        // Example:
-        \\        // const MyQuery = Query.QueryType(&.{{ .Position, .Velocity }});
-        \\        // var query = MyQuery.init(pool_manager);
-        \\        // for (query.iterate()) |entity| {{
-        \\        //     // Process entity
+        \\        // SystemManager automatically updates queries before calling this
+        \\        // Just iterate and process entities:
+        \\        //
+        \\        // while(try self.queries.movement_query.next()) |batch| {{
+        \\        //     for(batch.Position, batch.Velocity, batch.entities) |position, velocity, entity| {{
+        \\        //         _ = entity;
+        \\        //         position.x += velocity.dx;
+        \\        //         position.y += velocity.dy;
+        \\        //     }}
         \\        // }}
-        \\    }}
-        \\
-        \\    pub fn deinit(self: *Self) void {{
-        \\        _ = self;
         \\    }}
         \\}};
         \\

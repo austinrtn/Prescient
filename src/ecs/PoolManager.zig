@@ -1,5 +1,5 @@
 const std = @import("std");
-const PR = @import("PoolRegistry.zig");
+const PR = @import("../registries/PoolRegistry.zig");
 const em = @import("EntityManager.zig");
 const MaskManager = @import("MaskManager.zig").GlobalMaskManager;
 

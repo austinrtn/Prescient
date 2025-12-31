@@ -43,6 +43,16 @@ pub fn main() !void {
         return error.MissingProjectDir;
     };
 
+    // Ensure registries directory exists
+    const registries_dir = try std.fs.path.join(allocator, &.{ project_dir, "src", "registries" });
+    defer allocator.free(registries_dir);
+
+    std.fs.cwd().makePath(registries_dir) catch |err| {
+        print("Error creating registries directory: {}\n", .{err});
+        return err;
+    };
+    print("Ensured registries directory exists: {s}\n\n", .{registries_dir});
+
     // Build ComponentRegistry.zig
     try buildRegistry(allocator, project_dir, "components", "ComponentRegistry.zig", "Component");
 
@@ -67,7 +77,7 @@ fn buildRegistry(
     const directoryPath = try std.fs.path.join(allocator, &.{ project_dir, "src", directoryName });
     defer allocator.free(directoryPath);
 
-    const registryPath = try std.fs.path.join(allocator, &.{ project_dir, "src", "ecs", registryName });
+    const registryPath = try std.fs.path.join(allocator, &.{ project_dir, "src", "registries", registryName });
     defer allocator.free(registryPath);
 
     var fileStorage = FileStorage{ .fileWriter = .{ .filePath = registryPath } };
@@ -231,7 +241,7 @@ fn writeDataStructures(allocator: std.mem.Allocator, fs: *FileStorage, varName: 
 }
 
 fn ensurePoolRegistry(allocator: std.mem.Allocator, project_dir: []const u8) !void {
-    const poolRegistryPath = try std.fs.path.join(allocator, &.{ project_dir, "src", "ecs", "PoolRegistry.zig" });
+    const poolRegistryPath = try std.fs.path.join(allocator, &.{ project_dir, "src", "registries", "PoolRegistry.zig" });
     defer allocator.free(poolRegistryPath);
 
     // Check if PoolRegistry.zig exists
@@ -248,8 +258,8 @@ fn ensurePoolRegistry(allocator: std.mem.Allocator, project_dir: []const u8) !vo
     const template =
         \\const std = @import("std");
         \\const cr = @import("ComponentRegistry.zig");
-        \\const EntityPool = @import("EntityPool.zig").EntityPool;
-        \\const StorageStrategy = @import("StorageStrategy.zig").StorageStrategy;
+        \\const EntityPool = @import("../ecs/EntityPool.zig").EntityPool;
+        \\const StorageStrategy = @import("../ecs/StorageStrategy.zig").StorageStrategy;
         \\
         \\// GeneralPool - includes all registered components
         \\const general_components = std.meta.tags(cr.ComponentName);

@@ -1,7 +1,7 @@
 const std = @import("std");
 const ArchetypePool = @import("ArchetypePool.zig").ArchetypePoolType;
 const SparseSetPool = @import("SparseSetPool.zig").SparseSetPoolType;
-const PC = @import("PoolRegistry.zig");
+const PC = @import("../registries/PoolRegistry.zig");
 
 pub const PoolConfig = PC.PoolConfig;
 pub const PoolName = PC.PoolName;

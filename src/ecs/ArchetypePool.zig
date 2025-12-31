@@ -7,10 +7,10 @@
 // This prevents stale archetype_index bugs and ensures one move per entity per flush.
 
 const std = @import("std");
-const CR = @import("ComponentRegistry.zig");
+const CR = @import("../registries/ComponentRegistry.zig");
 const MM = @import("MaskManager.zig");
 const EM = @import("EntityManager.zig");
-const PC = @import("PoolRegistry.zig");
+const PC = @import("../registries/PoolRegistry.zig");
 const PoolConfig = PC.PoolConfig;
 const PoolName = PC.PoolName;
 const PoolInterfaceType = @import("PoolInterface.zig").PoolInterfaceType;
