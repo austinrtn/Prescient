@@ -175,10 +175,8 @@ pub fn SparseSetPoolType(comptime config: PoolConfig) type {
     // Merge required and optional components into single list
     const pool_components = comptime blk: {
         if (req.len == 0 and components_list.len == 0) {
-            @compileError("\nPool must contain at least one component!\n");
-        }
-
-        if (req.len == 0 and components_list.len > 0) {
+            break :blk &[_]CR.ComponentName{};
+        } else if (req.len == 0 and components_list.len > 0) {
             break :blk components_list;
         } else if (req.len > 0 and components_list.len == 0) {
             break :blk req;
@@ -655,16 +653,18 @@ pub fn SparseSetPoolType(comptime config: PoolConfig) type {
                 self.storage.bitmask_map.items[storage_index] = new_bitmask_map;
 
                 // Step 3: Apply component data changes in-place
-                for (entries.items) |entry| {
-                    switch (entry.component_data) {
-                        inline else => |data, tag| {
-                            const comp_storage = &@field(self.storage, @tagName(tag)).items[storage_index];
-                            if (entry.direction == .adding) {
-                                comp_storage.* = data;
-                            } else {
-                                comp_storage.* = null;
-                            }
-                        },
+                if (comptime pool_components.len > 0) {
+                    for (entries.items) |entry| {
+                        switch (entry.component_data) {
+                            inline else => |data, tag| {
+                                const comp_storage = &@field(self.storage, @tagName(tag)).items[storage_index];
+                                if (entry.direction == .adding) {
+                                    comp_storage.* = data;
+                                } else {
+                                    comp_storage.* = null;
+                                }
+                            },
+                        }
                     }
                 }
 

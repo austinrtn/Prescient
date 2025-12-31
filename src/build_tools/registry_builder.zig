@@ -266,7 +266,7 @@ fn ensurePoolRegistry(allocator: std.mem.Allocator, project_dir: []const u8) !vo
         \\pub const GeneralPool = EntityPool(.{
         \\    .name = .GeneralPool,
         \\    .components = general_components,
-        \\    .storage_strategy = .ARCHETYPE,
+        \\    .storage_strategy = .SPARSE,
         \\});
         \\
         \\// Add more pools below...
