@@ -8,7 +8,7 @@ const FileWriter = @import("FileWriter.zig").FileWriter;
 /// Also creates PoolRegistry.zig template if it doesn't exist
 
 const FileData = struct {
-    structName: []const u8,
+    typeName: []const u8,
     fileName: []const u8,
 };
 
@@ -18,7 +18,7 @@ const FileStorage = struct {
 
     pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
         for (self.fileData.items) |data| {
-            allocator.free(data.structName);
+            allocator.free(data.typeName);
             allocator.free(data.fileName);
         }
         self.fileData.deinit(allocator);
@@ -127,14 +127,14 @@ fn getFileData(allocator: std.mem.Allocator, fs: *FileStorage, directory: []cons
             const content = try file.readToEndAlloc(allocator, 1024 * 1024);
             defer allocator.free(content);
 
-            // Parse struct name from file
-            const structName = parseStructName(content) orelse {
-                print("  Warning: No struct found in {s}, skipping.\n", .{entry.name});
+            // Parse type name from file (struct, enum, union, or type alias)
+            const typeName = parseTypeName(content) orelse {
+                print("  Warning: No type definition found in {s}, skipping.\n", .{entry.name});
                 continue;
             };
 
             const fileData = FileData{
-                .structName = try allocator.dupe(u8, structName),
+                .typeName = try allocator.dupe(u8, typeName),
                 .fileName = try allocator.dupe(u8, entry.name),
             };
             try fs.fileData.append(allocator, fileData);
@@ -144,17 +144,18 @@ fn getFileData(allocator: std.mem.Allocator, fs: *FileStorage, directory: []cons
     return fs.fileData.items.len > 0;
 }
 
-fn parseStructName(content: []const u8) ?[]const u8 {
+fn parseTypeName(content: []const u8) ?[]const u8 {
     var lines = std.mem.splitAny(u8, content, "\n");
 
     while (lines.next()) |line| {
-        // Look for "pub const Name = struct"
+        // Look for "pub const Name = struct/enum/union" or "pub const Name = SomeType;"
         var tokens = std.mem.tokenizeAny(u8, line, " \t\r\n");
 
         var token_index: usize = 0;
         var found_pub = false;
         var found_const = false;
         var name: ?[]const u8 = null;
+        var found_equals = false;
 
         while (tokens.next()) |token| {
             if (token_index == 0 and std.mem.eql(u8, token, "pub")) {
@@ -164,9 +165,18 @@ fn parseStructName(content: []const u8) ?[]const u8 {
             } else if (token_index == 2 and found_const) {
                 name = token;
             } else if (token_index == 3 and name != null and std.mem.eql(u8, token, "=")) {
-                // Continue
-            } else if (token_index == 4 and name != null) {
-                if (std.mem.eql(u8, token, "struct") or std.mem.eql(u8, token, "struct{")) {
+                found_equals = true;
+            } else if (token_index == 4 and name != null and found_equals) {
+                // Check for struct, enum, union (with or without trailing brace)
+                if (std.mem.eql(u8, token, "struct") or std.mem.startsWith(u8, token, "struct{") or
+                    std.mem.eql(u8, token, "enum") or std.mem.startsWith(u8, token, "enum{") or std.mem.startsWith(u8, token, "enum(") or
+                    std.mem.eql(u8, token, "union") or std.mem.startsWith(u8, token, "union{") or std.mem.startsWith(u8, token, "union("))
+                {
+                    return name;
+                }
+                // Check for type alias (e.g., "pub const Color = u32;")
+                // Token should end with semicolon or be a type name
+                if (std.mem.endsWith(u8, token, ";") or isTypeName(token)) {
                     return name;
                 }
             }
@@ -174,6 +184,30 @@ fn parseStructName(content: []const u8) ?[]const u8 {
         }
     }
     return null;
+}
+
+fn isTypeName(token: []const u8) bool {
+    // Check for primitive types
+    const primitives = [_][]const u8{
+        "u8",    "u16",   "u32",   "u64",   "u128",  "usize",
+        "i8",    "i16",   "i32",   "i64",   "i128",  "isize",
+        "f16",   "f32",   "f64",   "f128",
+        "bool",  "void",  "noreturn",
+        "c_int", "c_uint", "c_long", "c_ulong",
+    };
+
+    for (primitives) |prim| {
+        if (std.mem.eql(u8, token, prim)) return true;
+    }
+
+    // Check for user-defined types (starts with uppercase, or contains a dot for namespaced types)
+    if (token.len > 0) {
+        const first = token[0];
+        if (first >= 'A' and first <= 'Z') return true;
+        if (std.mem.indexOf(u8, token, ".") != null) return true;
+    }
+
+    return false;
 }
 
 fn writeEmptyRegistry(allocator: std.mem.Allocator, fs: *FileStorage, varName: []const u8) !void {
@@ -208,7 +242,7 @@ fn writeImports(allocator: std.mem.Allocator, fs: *FileStorage, directoryName: [
         try fs.fileWriter.writeFmt(
             allocator,
             "pub const {s} = @import(\"../{s}/{s}\").{s};\n",
-            .{ data.structName, directoryName, data.fileName, data.structName },
+            .{ data.typeName, directoryName, data.fileName, data.typeName },
         );
     }
     try fs.fileWriter.writeLine(allocator, "");
@@ -218,7 +252,7 @@ fn writeDataStructures(allocator: std.mem.Allocator, fs: *FileStorage, varName: 
     // Write enum
     try fs.fileWriter.writeFmt(allocator, "pub const {s}Name = enum {{\n", .{varName});
     for (fs.fileData.items) |data| {
-        try fs.fileWriter.writeFmt(allocator, "    {s},\n", .{data.structName});
+        try fs.fileWriter.writeFmt(allocator, "    {s},\n", .{data.typeName});
     }
     try fs.fileWriter.writeLine(allocator, "};");
     try fs.fileWriter.writeLine(allocator, "");
@@ -226,7 +260,7 @@ fn writeDataStructures(allocator: std.mem.Allocator, fs: *FileStorage, varName: 
     // Write types array
     try fs.fileWriter.writeFmt(allocator, "pub const {s}Types = [_]type {{\n", .{varName});
     for (fs.fileData.items) |data| {
-        try fs.fileWriter.writeFmt(allocator, "    {s},\n", .{data.structName});
+        try fs.fileWriter.writeFmt(allocator, "    {s},\n", .{data.typeName});
     }
     try fs.fileWriter.writeLine(allocator, "};");
     try fs.fileWriter.writeLine(allocator, "");

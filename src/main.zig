@@ -11,7 +11,7 @@ pub fn main() !void {
 
     var general_pool = try prescient.getPool(.GeneralPool);
     _ = try general_pool.createEntity(.{
-        //Components Here  
+        //Components Here
     });
 
     while(true) {
