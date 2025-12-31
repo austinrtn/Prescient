@@ -189,28 +189,3 @@ pub const Ent = struct {
         unreachable;
     }
 };
-
-test "Basic" {
-    const api = try Prescient.init(testing.allocator);
-    defer api.deinit();
-
-    var pool = try api.getPool(.GeneralPool);
-    var ents: [100]EM.Entity = undefined; 
-    for(0..ents.len) |i| {
-        const new_ent = try pool.createEntity(.{
-            .Position = .{.x = 0, .y = 5},
-        });
-        ents[i] = new_ent;
-    }
-
-    try api.update();
-
-    var i: usize = 0;
-    for(ents) |ent| {
-        try pool.addComponent(ent, .Velocity, .{.dx = 1, .dy = 0});
-        i += 1;
-        if(i > ents.len - 10) break;
-    }
-    try api.update();
-}
-

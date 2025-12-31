@@ -18,15 +18,12 @@ pub const MovementSystem = struct {
     },
 
     pub fn update(self: *Self) !void{
-        const prescient = try Prescient.getPrescient();
-        try self.updateQueries();
+        try self.queries.movement.update();
         while(try self.queries.movement.next()) |batch| {
             for(batch.Position, batch.Velocity, batch.entities) |pos, vel, entity | {
+                _ = entity;
                 pos.x += vel.dx;
                 pos.y += vel.dy;
-
-                const result = try prescient.ent.getEntityComponentData(entity, .Position);
-                std.debug.print("\n{any}", .{result});
             }
         }
     }

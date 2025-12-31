@@ -61,7 +61,7 @@ const testing = std.testing;
 const CR = @import("ComponentRegistry.zig");
 const MM = @import("MaskManager.zig");
 const EM = @import("EntityManager.zig");
-const PC = @import("PoolConfig.zig");
+const PC = @import("PoolRegistry.zig");
 const PoolConfig = PC.PoolConfig;
 const PoolName = PC.PoolName;
 const MaskManager = @import("MaskManager.zig").GlobalMaskManager;
@@ -1029,7 +1029,7 @@ test "Entity removal and slot reuse" {
     try testing.expectEqual(@as(u32, 2), result3.storage_index);
 
     // Remove middle entity
-    try pool.removeEntity(result2.storage_index, SparsePool.NAME);
+    _ = try pool.removeEntity(result2.archetype_index, result2.storage_index, SparsePool.NAME);
 
     // Verify entity2 is gone
     try testing.expectEqual(@as(?EM.Entity, null), pool.storage.entities.items[result2.storage_index]);
@@ -1218,7 +1218,7 @@ test "SwapRemove correctly updates bitmask_map indices" {
     try testing.expectEqual(@as(u32, 2), bm3.in_list_index);
 
     // Remove the middle entity (result2) - this should swap result3 into result2's position
-    try pool.removeEntity(result2.storage_index, SparsePool.NAME);
+    _ = try pool.removeEntity(bm2.bitmask_index, result2.storage_index, SparsePool.NAME);
 
     // result3 should now have in_list_index of 1 (swapped into result2's old spot)
     const bm3_after = pool.getBitmaskMap(result3.storage_index);

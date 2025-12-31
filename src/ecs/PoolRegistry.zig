@@ -1,9 +1,7 @@
 const std = @import("std");
 const cr = @import("ComponentRegistry.zig");
 const EntityPool = @import("EntityPool.zig").EntityPool;
-const PC = @import("PoolConfig.zig");
-
-pub const PoolName = PC.PoolName;
+const StorageStrategy = @import("StorageStrategy.zig").StorageStrategy;
 
 const general_components = std.meta.tags(cr.ComponentName);
 pub const GeneralPool = EntityPool(.{
@@ -92,3 +90,20 @@ pub fn poolHasComponent(comptime pool_name: PoolName, comptime component: cr.Com
     }
     return false;
 }
+
+pub const PoolName = enum(u32) {
+    GeneralPool,
+    MovementPool,
+    EnemyPool,
+    PlayerPool,
+    RenderablePool,
+    CombatPool,
+    UIPool,
+};
+
+pub const PoolConfig = struct {
+    name: PoolName,
+    req: ?[]const cr.ComponentName = null,
+    components: ?[]const cr.ComponentName = null,
+    storage_strategy: StorageStrategy,
+};
