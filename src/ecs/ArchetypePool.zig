@@ -85,19 +85,13 @@ pub fn ArchetypePoolType(comptime config: PoolConfig) type {
 
 
     const pool_components = comptime blk: {
-        if(req.len == 0 and components_list.len == 0) {
-            @compileError("\nPool must contain at least one component!\n");
-        }
-
-        if(req.len == 0 and components_list.len > 0) {
+        if (req.len == 0 and components_list.len == 0) {
+            break :blk &[_]CR.ComponentName{};
+        } else if (req.len == 0 and components_list.len > 0) {
             break :blk components_list;
-        }
-
-        else if(req.len > 0 and components_list.len == 0) {
+        } else if (req.len > 0 and components_list.len == 0) {
             break :blk req;
-        }
-
-        else {
+        } else {
             break :blk req ++ components_list;
         }
     };
@@ -511,13 +505,15 @@ pub fn ArchetypePoolType(comptime config: PoolConfig) type {
                 }
 
                 // Step 3: Set - write component data for adds
-                for (entries.items) |entry| {
-                    if (entry.direction == .adding) {
-                        switch (entry.component_data) {
-                            inline else => |data, tag| {
-                                // Overwrite the undefined slot with actual data
-                                const dest_array = @field(dest_archetype, @tagName(tag)).?;
-                                dest_array.items[move_result.archetype_index] = data.?;
+                if (comptime pool_components.len > 0) {
+                    for (entries.items) |entry| {
+                        if (entry.direction == .adding) {
+                            switch (entry.component_data) {
+                                inline else => |data, tag| {
+                                    // Overwrite the undefined slot with actual data
+                                    const dest_array = @field(dest_archetype, @tagName(tag)).?;
+                                    dest_array.items[move_result.archetype_index] = data.?;
+                                },
                             }
                         }
                     }
