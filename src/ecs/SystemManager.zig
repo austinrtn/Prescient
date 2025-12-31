@@ -44,7 +44,21 @@ pub const SystemManager = struct {
 
         var storage: SystemManagerStorage = undefined;
         inline for(std.meta.tags(SR.SystemName)) |system| {
-            @field(storage, @tagName(system)) = SR.getTypeByName(system).init(allocator, pool_manager);
+            const SystemType = SR.getTypeByName(system);
+            var sys_instance: SystemType = undefined;
+
+            // Set allocator directly
+            sys_instance.allocator = allocator;
+
+            // Initialize all queries via reflection
+            inline for(std.meta.fields(@TypeOf(sys_instance.queries))) |field| {
+                @field(sys_instance.queries, field.name) = field.type.init(allocator, pool_manager);
+            }
+
+            @field(storage, @tagName(system)) = sys_instance;
+            if(std.meta.hasFn(SystemType, "init")){
+                sys_instance.init();
+            }
         }
         self.storage = storage;
 
@@ -53,8 +67,17 @@ pub const SystemManager = struct {
 
     pub fn deinit(self: *Self) void {
         inline for(std.meta.fields(SystemManagerStorage)) |field| {
-            @field(self.storage, field.name).deinit();
-            
+            var system = &@field(self.storage, field.name);
+            inline for(std.meta.fields(@TypeOf(system.queries))) |query_field| {
+                @field(system.queries, query_field.name).deinit();
+            }
+        }
+    }
+
+    fn updateSystemQueries(self: *Self, system: anytype) !void {
+        _ = self;
+        inline for(std.meta.fields(@TypeOf(system.queries))) |query_field| {
+            try @field(system.queries, query_field.name).update();
         }
     }
 
@@ -65,7 +88,9 @@ pub const SystemManager = struct {
 
     pub fn update(self: *Self) !void {
         inline for(std.meta.fields(SystemManagerStorage)) |field| {
-            try @field(self.storage, field.name).update();
+            var system = &@field(self.storage, field.name);
+            try self.updateSystemQueries(system);
+            try system.update();
         }
     }
 };
