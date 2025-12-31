@@ -1,5 +1,4 @@
 const std = @import("std");
-const testing = std.testing;
 const CR = @import("ComponentRegistry.zig");
 const PR = @import("PoolRegistry.zig");
 const SR = @import("SystemRegistry.zig");

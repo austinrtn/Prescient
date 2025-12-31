@@ -104,39 +104,3 @@ pub fn getComponentsFromData(comptime pool_components: []const CR.ComponentName,
 
     return &components;
 }
-
-test "EntityBuilderType with required and optional fields" {
-    const testing = std.testing;
-
-    // Create a builder with Position required, Velocity and Health optional
-    const Builder = EntityBuilderType(&.{.Position}, &.{.Velocity, .Health});
-
-    // Test 1: Provide only required field
-    const entity1: Builder = .{
-        .Position = .{ .x = 10.0, .y = 20.0 },
-    };
-    try testing.expect(entity1.Position.x == 10.0);
-    try testing.expect(entity1.Velocity == null);
-    try testing.expect(entity1.Health == null);
-
-    // Test 2: Provide required + one optional
-    const entity2: Builder = .{
-        .Position = .{ .x = 5.0, .y = 15.0 },
-        .Velocity = .{ .dx = 1.0, .dy = 2.0 },
-    };
-    try testing.expect(entity2.Position.x == 5.0);
-    try testing.expect(entity2.Velocity != null);
-    try testing.expect(entity2.Velocity.?.dx == 1.0);
-    try testing.expect(entity2.Health == null);
-
-    // Test 3: Provide all fields
-    const entity3: Builder = .{
-        .Position = .{ .x = 1.0, .y = 2.0 },
-        .Velocity = .{ .dx = 3.0, .dy = 4.0 },
-        .Health = .{ .current = 100.0, .max = 100.0 },
-    };
-    try testing.expect(entity3.Position.x == 1.0);
-    try testing.expect(entity3.Velocity != null);
-    try testing.expect(entity3.Health != null);
-    try testing.expect(entity3.Health.?.current == 100.0);
-}

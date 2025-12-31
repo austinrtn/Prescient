@@ -10,68 +10,12 @@ pub const GeneralPool = EntityPool(.{
     .storage_strategy = .ARCHETYPE,
 });
 
-/// Basic movement pool for entities that can move
-/// Required: (none)
-/// Optional: Position, Velocity
-pub const MovementPool = EntityPool(.{
-    .name = .MovementPool,
-    .components = &.{.Position, .Velocity},
-    .storage_strategy = .ARCHETYPE,
-});
-
-pub const UIPool = EntityPool(.{
-    .name = .UIPool,
-    .storage_strategy = .SPARSE,
-    .components = &.{.Position, .Sprite},
-});
-
-/// Enemy entities with combat and AI capabilities
-/// Required: (none)
-/// Optional: Position, Velocity, Attack, Health, AI
-pub const EnemyPool = EntityPool(.{
-    .name = .EnemyPool,
-    .components = &.{.Position, .Velocity, .Attack, .Health, .AI},
-    .storage_strategy = .ARCHETYPE,
-});
-
-/// Player entities - must have a position
-/// Required: Position
-/// Optional: Health, Attack, Sprite, Player
-pub const PlayerPool = EntityPool(.{
-    .name = .PlayerPool,
-    .req = &.{.Position},
-    .components = &.{.Health, .Attack, .Sprite, .Player, .AI},
-    .storage_strategy = .ARCHETYPE,
-});
-
-/// Renderable entities that can be drawn to screen
-/// Required: Position, Sprite
-/// Optional: Velocity
-pub const RenderablePool = EntityPool(.{
-    .name = .RenderablePool,
-    .req = &.{.Position, .Sprite},
-    .components = &.{.Velocity},
-    .storage_strategy = .ARCHETYPE,
-});
-
-/// Combat entities that can fight
-/// Required: Health, Attack
-/// Optional: AI
-pub const CombatPool = EntityPool(.{
-    .name = .CombatPool,
-    .req = &.{.Health, .Attack},
-    .components = &.{.AI},
-    .storage_strategy = .ARCHETYPE,
-});
+pub const PoolName = enum(u32) {
+    GeneralPool,
+};
 
 pub const pool_types = [_]type{
     GeneralPool,
-    MovementPool,
-    EnemyPool,
-    PlayerPool,
-    RenderablePool,
-    CombatPool,
-    UIPool,
 };
 
 pub fn getPoolFromName(comptime pool: PoolName) type {
@@ -91,15 +35,6 @@ pub fn poolHasComponent(comptime pool_name: PoolName, comptime component: cr.Com
     return false;
 }
 
-pub const PoolName = enum(u32) {
-    GeneralPool,
-    MovementPool,
-    EnemyPool,
-    PlayerPool,
-    RenderablePool,
-    CombatPool,
-    UIPool,
-};
 
 pub const PoolConfig = struct {
     name: PoolName,

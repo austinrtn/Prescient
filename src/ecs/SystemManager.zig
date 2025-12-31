@@ -69,21 +69,3 @@ pub const SystemManager = struct {
         }
     }
 };
-
-test "SystemManager getSystem" {
-    const allocator = std.testing.allocator;
-
-    var pool_manager = PM.PoolManager.init(allocator);
-    defer pool_manager.deinit();
-
-    var system_manager = SystemManager.init(allocator, &pool_manager);
-    defer system_manager.deinit();
-
-    // Get system first time - should create it
-    const movement = system_manager.getSystem(.Movement);
-    _ = movement;
-
-    for(0..5) |_|{
-        try system_manager.update();
-    }
-}

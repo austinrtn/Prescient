@@ -125,33 +125,3 @@ pub const PoolManager = struct {
             }
         }
 };
-
-test "flushAllPools" {
-    const allocator = std.testing.allocator;
-
-    var entity_manager = try em.EntityManager.init(allocator);
-    var pool_manager = PoolManager.init(allocator);
-    const movement_pool = try pool_manager.getOrCreatePool(.MovementPool);
-    defer {
-        pool_manager.deinit();
-        entity_manager.deinit();
-    }
-
-    var iface = movement_pool.getInterface(&entity_manager);
-
-    // Create entity with Position
-    const entity = try iface.createEntity(.{ .Position = .{ .x = 10.0, .y = 20.0 } });
-    const slot_before = try entity_manager.getSlot(entity);
-    const mask_before = movement_pool.mask_list.items[slot_before.mask_list_index];
-    try std.testing.expect(!MaskManager.maskContains(mask_before, MaskManager.Comptime.componentToBit(.Velocity)));
-
-    // Queue a migration to add Velocity
-    try iface.addComponent(entity, .Velocity, .{ .dx = 5.0, .dy = 10.0 });
-
-    // Flush all pools and verify entity was updated
-    try pool_manager.flushAllPools(&entity_manager);
-
-    const slot_after = try entity_manager.getSlot(entity);
-    const mask_after = movement_pool.mask_list.items[slot_after.mask_list_index];
-    try std.testing.expect(MaskManager.maskContains(mask_after, MaskManager.Comptime.componentToBit(.Velocity)));
-}

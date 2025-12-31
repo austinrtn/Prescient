@@ -671,21 +671,3 @@ pub fn ArchetypePoolType(comptime config: PoolConfig) type {
         }
     };
 }
-
-test "flush" {
-    const allocator = std.testing.allocator;
-
-    const Pool = ArchetypePoolType(.{
-        .name = .MovementPool,
-        .components = &.{ .Position, .Velocity },
-        .storage_strategy = .ARCHETYPE,
-    });
-    var pool = try Pool.init(allocator);
-    defer pool.deinit();
-    const dummy_ent = Entity{.index = 0, .generation = 0};
-    const ent1 = try pool.addEntity(dummy_ent, .{.Position = .{.x = 3, .y = 2}});
-
-    try pool.addOrRemoveComponent(dummy_ent, ent1.archetype_index, Pool.NAME, ent1.storage_index, false, .adding, .Velocity, .{.dx = 1, .dy = 1});
-    const results = try pool.flushMigrationQueue();
-    defer allocator.free(results);
-}
