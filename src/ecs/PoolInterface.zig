@@ -26,7 +26,7 @@ pub fn PoolInterfaceType(comptime pool_name: PR.PoolName) type {
             };
         }
 
-        pub fn createEntity(self: *Self, comptime component_data: Builder) !EM.Entity {
+        pub fn createEntity(self: *Self, component_data: Builder) !EM.Entity {
             const pool_mask = @TypeOf(self.pool.*).pool_mask;
             var entity_slot = try self.entity_manager.getNewSlot(undefined, pool_mask, undefined);
 

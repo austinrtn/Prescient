@@ -207,53 +207,71 @@ pub fn ArchetypePoolType(comptime config: PoolConfig) type {
             return self.mask_list[@as(usize, mask_list_index)];
         }
 
-        pub fn addEntity(self: *Self, entity: Entity, comptime component_data: Builder) !struct { storage_index: u32, archetype_index: u32 }{
-            // Build list of non-null components and validate required components
+        pub fn addEntity(self: *Self, entity: Entity, component_data: Builder) !struct { storage_index: u32, archetype_index: u32 }{
+            // Build component mask at runtime by checking which optional fields are non-null
+            // Required components are always included (enforced by Builder type system)
+            var mask: MaskManager.Mask = 0;
 
-            const components = comptime EB.getComponentsFromData(pool_components, Builder, component_data);
-            // Note: Required component validation is handled by Builder type system
-            // Builder has non-optional fields for all required components, so they must be provided
-            
-            const mask = comptime MaskManager.Comptime.createMask(components);
+            inline for (pool_components) |comp| {
+                const field_name = @tagName(comp);
+                const is_optional = comptime blk: {
+                    const field_info = for (std.meta.fields(Builder)) |f| {
+                        if (std.mem.eql(u8, f.name, field_name)) break f;
+                    } else unreachable;
+                    break :blk @typeInfo(field_info.type) == .optional;
+                };
+
+                if (!is_optional) {
+                    // Required component - always include
+                    mask |= comptime MaskManager.Comptime.componentToBit(comp);
+                } else {
+                    // Optional component - check at runtime if non-null
+                    if (@field(component_data, field_name) != null) {
+                        mask |= comptime MaskManager.Comptime.componentToBit(comp);
+                    }
+                }
+            }
+
             const archetype_idx = try self.getOrCreateArchetype(mask);
             const archetype = &self.archetype_list.items[archetype_idx];
 
             try archetype.entities.append(self.allocator, entity);
 
-            // Store component data for each non-null component
-            inline for(components) |component| {
-                const T = CR.getTypeByName(component);
-                const field_value = @field(component_data, @tagName(component));
+            // Store component data for each component in the mask
+            inline for (pool_components) |component| {
+                const field_bit = comptime MaskManager.Comptime.componentToBit(component);
 
-                // Unwrap optional if needed
-                const data = comptime blk: {
-                    const field_info = for (std.meta.fields(Builder)) |f| {
-                        if (std.mem.eql(u8, f.name, @tagName(component))) break f;
-                    } else unreachable;
+                if (MaskManager.maskContains(mask, field_bit)) {
+                    const T = CR.getTypeByName(component);
+                    const field_name = @tagName(component);
+                    const field_value = @field(component_data, field_name);
 
-                    const is_optional = @typeInfo(field_info.type) == .optional;
-                    if (is_optional) {
-                        break :blk field_value.?; // Unwrap the optional
-                    } else {
-                        break :blk field_value; // Already non-optional
-                    }
-                };
+                    // Check if field is optional at comptime, unwrap at runtime if needed
+                    const is_optional = comptime blk: {
+                        const field_info = for (std.meta.fields(Builder)) |f| {
+                            if (std.mem.eql(u8, f.name, field_name)) break f;
+                        } else unreachable;
+                        break :blk @typeInfo(field_info.type) == .optional;
+                    };
 
-                const typed_data = if (@TypeOf(data) == T)
-                    data
-                else blk: {
-                    var result: T = undefined;
-                    inline for(std.meta.fields(T)) |field| {
-                        if(!@hasField(@TypeOf(data), field.name)) {
-                            @compileError("Field " ++ field.name ++ " is missing from component "
-                                ++ @tagName(component) ++ "!\nMake sure fields of all components are included and spelled properly when using Pool.createEntity()\n");
+                    const unwrapped = if (is_optional) field_value.? else field_value;
+
+                    const typed_data = if (@TypeOf(unwrapped) == T)
+                        unwrapped
+                    else blk: {
+                        var result: T = undefined;
+                        inline for (std.meta.fields(T)) |field| {
+                            if (!@hasField(@TypeOf(unwrapped), field.name)) {
+                                @compileError("Field " ++ field.name ++ " is missing from component " ++
+                                    @tagName(component) ++ "!\nMake sure fields of all components are included and spelled properly when using Pool.createEntity()\n");
+                            }
+                            @field(result, field.name) = @field(unwrapped, field.name);
                         }
-                        @field(result, field.name) = @field(data, field.name);
-                    }
-                    break :blk result;
-                };
+                        break :blk result;
+                    };
 
-                try self.setArchetypeComponent(archetype, component, typed_data);
+                    try self.setArchetypeComponent(archetype, component, typed_data);
+                }
             }
             return .{
                 .storage_index = @intCast(archetype.entities.items.len - 1),
