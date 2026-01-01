@@ -43,8 +43,8 @@ pub const SystemManager = struct {
         self.pool_manager = pool_manager;
 
         var storage: SystemManagerStorage = undefined;
-        inline for(std.meta.tags(SR.SystemName)) |system| {
-            const SystemType = SR.getTypeByName(system);
+        inline for(std.meta.tags(SR.SystemName), 0..) |system, i| {
+            const SystemType = SR.SystemTypes[i];
             var sys_instance: SystemType = undefined;
 
             // Set allocator directly
