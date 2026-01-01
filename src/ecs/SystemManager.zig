@@ -81,12 +81,12 @@ pub const SystemManager = struct {
         }
     }
 
-    pub fn deitializeSystems(self: *Self) void {
+    pub fn deinitializeSystems(self: *Self) void {
         inline for (std.meta.fields(SystemManagerStorage)) |field| {
             const SystemType = @TypeOf(@field(self.storage, field.name));
             if (std.meta.hasFn(SystemType, "deinit")) {
                 var system = &@field(self.storage, field.name);
-                try system.deinit();
+                system.deinit();
             }
         }
     }

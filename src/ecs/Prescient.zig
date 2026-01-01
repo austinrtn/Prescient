@@ -56,7 +56,7 @@ pub const Prescient = struct {
 
     pub fn deinit(self: *Self) void {
         const allocator = self._allocator;
-        self._system_manager.deitializeSystems();
+        self._system_manager.deinitializeSystems();
         self._entity_manager.deinit();
         self._pool_manager.deinit();
         allocator.destroy(self._pool_manager);
