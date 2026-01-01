@@ -78,7 +78,15 @@ pub const Prescient = struct {
 
     pub fn getSystem(self: *Self, comptime system: SR.SystemName) *SR.getTypeByName(system) {
         return self._system_manager.getSystem(system);
-    } 
+    }
+
+    pub fn setSystemActive(self: *Self, comptime system: SR.SystemName, active: bool) void {
+        self._system_manager.setSystemActive(system, active);
+    }
+
+    pub fn isSystemActive(self: *Self, comptime system: SR.SystemName) bool {
+        return self._system_manager.isSystemActive(system);
+    }
 
     pub fn getQuery(self: *Self, comptime components: []const CR.ComponentName) Query(components) {
         return Query(components).init(self._allocator, self._pool_manager);

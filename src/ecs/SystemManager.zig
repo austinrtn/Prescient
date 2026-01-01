@@ -102,11 +102,34 @@ pub const SystemManager = struct {
         return &@field(self.storage, field_name);
     }
 
+    pub fn setSystemActive(self: *Self, comptime system: SR.SystemName, active: bool) void {
+        const field_name = @tagName(system);
+        inline for(std.meta.fields(SystemManagerStorage)) |field| {
+            if (comptime std.mem.eql(u8, field.name, field_name)) {
+                @field(self.storage, field.name).active = active;
+                return;
+            }
+        }
+    }
+
+    pub fn isSystemActive(self: *Self, comptime system: SR.SystemName) bool {
+        const field_name = @tagName(system);
+        inline for(std.meta.fields(SystemManagerStorage)) |field| {
+            if (comptime std.mem.eql(u8, field.name, field_name)) {
+                return @field(self.storage, field.name).active;
+            }
+        }
+    }
+
     pub fn update(self: *Self) !void {
         inline for(std.meta.fields(SystemManagerStorage)) |field| {
             var system = &@field(self.storage, field.name);
             try self.updateSystemQueries(system);
-            try system.update();
+
+            // Only call update() if system is active
+            if (system.active) {
+                try system.update();
+            }
         }
     }
 };

@@ -55,6 +55,7 @@ pub fn main() !void {
         \\    const Self = @This();
         \\
         \\    allocator: std.mem.Allocator,
+        \\    active: bool = true,
         \\    queries: struct {{
         \\        // Define your queries here
         \\    }},
