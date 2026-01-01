@@ -43,7 +43,7 @@ pub const SystemManager = struct {
         self.pool_manager = pool_manager;
 
         var storage: SystemManagerStorage = undefined;
-        inline for(std.meta.tags(SR.SystemName), 0..) |system, i| {
+        inline for(std.meta.tags(SR.SystemName), 0..) |_, i| {
             const SystemType = SR.SystemTypes[i];
             var sys_instance: SystemType = undefined;
 
@@ -55,7 +55,7 @@ pub const SystemManager = struct {
                 @field(sys_instance.queries, field.name) = field.type.init(allocator, pool_manager);
             }
 
-            @field(storage, @tagName(system)) = sys_instance;
+            @field(storage, std.meta.fields(SystemManagerStorage)[i].name) = sys_instance;
             if(std.meta.hasFn(SystemType, "init")){
                 try sys_instance.init();
             }
