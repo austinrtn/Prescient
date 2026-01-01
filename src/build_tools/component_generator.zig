@@ -45,6 +45,8 @@ pub fn main() !void {
 
     // Generate component template
     const template = try std.fmt.allocPrint(allocator,
+        \\const Prescient = @import("../ecs/Prescient.zig").Prescient;
+        \\
         \\pub const {s} = struct {{
         \\    // Add your fields here
         \\    example_field: u32 = 0,
@@ -59,6 +61,6 @@ pub fn main() !void {
     try file.writeAll(template);
 
     std.debug.print("\nComponent created: {s}\n", .{component_name});
-    std.debug.print("Location: {s}\n", .{file_path});
+    std.debug.print("{s}\n", .{file_path});
     std.debug.print("\nRun 'zig build registry' to regenerate ComponentRegistry.zig\n\n", .{});
 }

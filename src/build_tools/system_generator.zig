@@ -46,6 +46,7 @@ pub fn main() !void {
     // Generate system template
     const template = try std.fmt.allocPrint(allocator,
         \\const std = @import("std");
+        \\const Prescient = @import("../ecs/Prescient.zig").Prescient;
         \\const ComponentRegistry = @import("../registries/ComponentRegistry.zig");
         \\const Query = @import("../ecs/Query.zig").QueryType;
         \\const PoolManager = @import("../ecs/PoolManager.zig").PoolManager;
@@ -72,6 +73,6 @@ pub fn main() !void {
     try file.writeAll(template);
 
     std.debug.print("\nSystem created: {s}\n", .{system_name});
-    std.debug.print("Location: {s}\n", .{file_path});
+    std.debug.print("{s}\n", .{file_path});
     std.debug.print("\nRun 'zig build registry' to regenerate SystemRegistry.zig\n\n", .{});
 }

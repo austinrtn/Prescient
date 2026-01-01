@@ -6,9 +6,14 @@ const EM = @import("EntityManager.zig");
 const PM = @import("PoolManager.zig");
 const SM = @import("SystemManager.zig");
 const PI = @import("PoolInterface.zig");
+const Query = @import("Query.zig").QueryType;
 const PoolInterface = PI.PoolInterfaceType;
 
 pub const Prescient = struct {
+    pub const Entity = EM.Entity;
+    pub const compTypes = CR.compTypes;
+    pub const comps = CR.ComponentName;
+
     const Self = @This();
     var _Prescient: *Self = undefined;
     var _initiated: bool = false;
@@ -44,11 +49,14 @@ pub const Prescient = struct {
         _initiated = true;
         _Prescient = self;
 
+        try self._system_manager.initializeSystems();
+
         return self;
     }
 
     pub fn deinit(self: *Self) void {
         const allocator = self._allocator;
+        self._system_manager.deitializeSystems();
         self._entity_manager.deinit();
         self._pool_manager.deinit();
         allocator.destroy(self._pool_manager);
@@ -70,6 +78,10 @@ pub const Prescient = struct {
 
     pub fn getSystem(self: *Self, comptime system: SR.SystemName) *SR.getTypeByName(system) {
         return self._system_manager.getSystem(system);
+    } 
+
+    pub fn getQuery(self: *Self, comptime components: []const CR.ComponentName) Query(components) {
+        return Query(components).init(self._allocator, self._pool_manager);
     }
 };
 

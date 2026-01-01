@@ -56,13 +56,20 @@ pub const SystemManager = struct {
             }
 
             @field(storage, std.meta.fields(SystemManagerStorage)[i].name) = sys_instance;
-            if(std.meta.hasFn(SystemType, "init")){
-                try sys_instance.init();
-            }
         }
         self.storage = storage;
 
         return self;
+    }
+
+    pub fn initializeSystems(self: *Self) !void {
+        inline for (std.meta.fields(SystemManagerStorage)) |field| {
+            const SystemType = @TypeOf(@field(self.storage, field.name));
+            if (std.meta.hasFn(SystemType, "init")) {
+                var system = &@field(self.storage, field.name);
+                try system.init();
+            }
+        }
     }
 
     pub fn deinit(self: *Self) void {
@@ -74,6 +81,15 @@ pub const SystemManager = struct {
         }
     }
 
+    pub fn deitializeSystems(self: *Self) void {
+        inline for (std.meta.fields(SystemManagerStorage)) |field| {
+            const SystemType = @TypeOf(@field(self.storage, field.name));
+            if (std.meta.hasFn(SystemType, "deinit")) {
+                var system = &@field(self.storage, field.name);
+                try system.deinit();
+            }
+        }
+    }
     fn updateSystemQueries(self: *Self, system: anytype) !void {
         _ = self;
         inline for(std.meta.fields(@TypeOf(system.queries))) |query_field| {
