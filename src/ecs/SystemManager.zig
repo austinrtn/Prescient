@@ -37,7 +37,7 @@ pub const SystemManager = struct {
     storage: SystemManagerStorage,
     pool_manager: *PM.PoolManager,
 
-    pub fn init(allocator: std.mem.Allocator, pool_manager: *PM.PoolManager) Self {
+    pub fn init(allocator: std.mem.Allocator, pool_manager: *PM.PoolManager) !Self {
         var self: Self = undefined;
         self.allocator = allocator;
         self.pool_manager = pool_manager;
@@ -47,12 +47,15 @@ pub const SystemManager = struct {
             const SystemType = SR.SystemTypes[i];
             var sys_instance: SystemType = undefined;
 
-            // Set allocator directly
+            // Set allocator and active directly (undefined doesn't apply defaults)
             sys_instance.allocator = allocator;
+            if (@hasField(SystemType, "active")) {
+                sys_instance.active = true;
+            }
 
             // Initialize all queries via reflection
             inline for(std.meta.fields(@TypeOf(sys_instance.queries))) |field| {
-                @field(sys_instance.queries, field.name) = field.type.init(allocator, pool_manager);
+                @field(sys_instance.queries, field.name) = try field.type.init(allocator, pool_manager);
             }
 
             @field(storage, std.meta.fields(SystemManagerStorage)[i].name) = sys_instance;
@@ -102,32 +105,13 @@ pub const SystemManager = struct {
         return &@field(self.storage, field_name);
     }
 
-    pub fn setSystemActive(self: *Self, comptime system: SR.SystemName, active: bool) void {
-        const field_name = @tagName(system);
-        inline for(std.meta.fields(SystemManagerStorage)) |field| {
-            if (comptime std.mem.eql(u8, field.name, field_name)) {
-                @field(self.storage, field.name).active = active;
-                return;
-            }
-        }
-    }
-
-    pub fn isSystemActive(self: *Self, comptime system: SR.SystemName) bool {
-        const field_name = @tagName(system);
-        inline for(std.meta.fields(SystemManagerStorage)) |field| {
-            if (comptime std.mem.eql(u8, field.name, field_name)) {
-                return @field(self.storage, field.name).active;
-            }
-        }
-    }
-
     pub fn update(self: *Self) !void {
         inline for(std.meta.fields(SystemManagerStorage)) |field| {
             var system = &@field(self.storage, field.name);
-            try self.updateSystemQueries(system);
-
-            // Only call update() if system is active
-            if (system.active) {
+            // Check if system should run (active field or no active field = always run)
+            const should_run = if (@hasField(@TypeOf(system.*), "active")) system.active else true;
+            if (should_run) {
+                try self.updateSystemQueries(system);
                 try system.update();
             }
         }

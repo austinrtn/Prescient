@@ -35,7 +35,7 @@ pub const Prescient = struct {
         pool_manager.* = PM.PoolManager.init(allocator);
 
         const entity_manager = try EM.EntityManager.init(allocator);
-        const system_manager = SM.SystemManager.init(allocator, pool_manager);
+        const system_manager = try SM.SystemManager.init(allocator, pool_manager);
 
         const self = try allocator.create(Self);
         self.* = .{
@@ -57,10 +57,10 @@ pub const Prescient = struct {
     pub fn deinit(self: *Self) void {
         const allocator = self._allocator;
         self._system_manager.deinitializeSystems();
+        self._system_manager.deinit();
         self._entity_manager.deinit();
         self._pool_manager.deinit();
         allocator.destroy(self._pool_manager);
-        self._system_manager.deinit();
         allocator.destroy(self);
     }
 
@@ -75,7 +75,6 @@ pub const Prescient = struct {
         return PoolInterface(pool_name).init(pool, &self._entity_manager);
     } 
 
-
     pub fn getSystem(self: *Self, comptime system: SR.SystemName) *SR.getTypeByName(system) {
         return self._system_manager.getSystem(system);
     }
@@ -88,8 +87,12 @@ pub const Prescient = struct {
         return self._system_manager.isSystemActive(system);
     }
 
-    pub fn getQuery(self: *Self, comptime components: []const CR.ComponentName) Query(components) {
+    pub fn getQuery(self: *Self, comptime components: []const CR.ComponentName) !Query(components) {
         return Query(components).init(self._allocator, self._pool_manager);
+    }
+
+    pub fn queryPool(self: *Self, comptime pool: PR.PoolName) !Query(PR.getPoolFromName(pool).COMPONENTS) {
+        return Query(PR.getPoolFromName(pool).COMPONENTS).init(self._allocator, self._pool_manager);
     }
 };
 

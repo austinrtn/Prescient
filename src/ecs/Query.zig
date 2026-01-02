@@ -29,7 +29,7 @@ pub fn QueryType(comptime components: []const CR.ComponentName) type {
         // Track sparse batch allocations for cleanup
         sparse_batch_allocs: ArrayList(QT.ArchetypeCacheType(components)) = .{},
 
-        pub fn init(allocator: std.mem.Allocator, pool_manager: *PM.PoolManager) Self {
+        pub fn init(allocator: std.mem.Allocator, pool_manager: *PM.PoolManager) !Self {
             var self = Self{
                 .allocator = allocator,
                 .pool_manager = pool_manager,
@@ -42,6 +42,9 @@ pub fn QueryType(comptime components: []const CR.ComponentName) type {
                 pool_element.archetype_cache = ArrayList(QT.ArchetypeCacheType(components)){};
                 pool_element.sparse_cache = ArrayList(usize){};
             }
+
+            // Cache all existing archetypes on init
+            try self.cacheArchetypesFromPools(true);
 
             return self;
         }
@@ -79,37 +82,47 @@ pub fn QueryType(comptime components: []const CR.ComponentName) type {
                 }
             }
             self.sparse_batch_allocs.clearRetainingCapacity();
-            try self.cacheArchetypesFromPools();
+            try self.cacheArchetypesFromPools(false);
             self.updated = true;
         }
 
-        pub fn cacheArchetypesFromPools(self: *Self) !void {
+        fn cacheArchetypesFromPools(self: *Self, cache_all: bool) !void {
             inline for(std.meta.fields(QResultType)) |field| {
                 const pool_element = &@field(self.query_storage, field.name);
                 const PoolElemType = @TypeOf(pool_element.*);
-
-                // POOL_NAME is comptime - no inline switch needed!
                 const pool = try self.pool_manager.getOrCreatePool(PoolElemType.POOL_NAME);
 
-                //Cache new archetypes / virtual archetypes
-                for(pool.new_archetypes.items) |arch| {
-                    if(pool_element.access == .Direct) {
-                        try self.cache(pool_element, pool, arch, null);
-                    }
-                    else {
-                        const archetype_bitmask = pool.mask_list.items[arch];
-                        if(MaskManager.maskContains(archetype_bitmask, Self.MASK)){
-                            try self.cache(pool_element, pool, arch, null);
+                // Get total archetype count based on storage strategy
+                const total_count = if(PoolElemType.STORAGE_STRATEGY == .ARCHETYPE)
+                    pool.archetype_list.items.len
+                else
+                    pool.virtual_archetypes.items.len;
+
+                const arch_count = if(cache_all) total_count else pool.new_archetypes.items.len;
+
+                for(0..arch_count) |i| {
+                    const arch = if(cache_all) i else pool.new_archetypes.items[i];
+                    try self.cacheIfMatches(pool_element, pool, arch);
+                }
+
+                // Handle reallocated archetypes (update only, archetype pools only)
+                if(!cache_all and PoolElemType.STORAGE_STRATEGY == .ARCHETYPE) {
+                    for(pool.reallocated_archetypes.items) |arch| {
+                        if(std.mem.indexOfScalar(usize, pool_element.archetype_indices.items, arch)) |idx| {
+                            try self.cache(pool_element, pool, arch, idx);
                         }
                     }
                 }
+            }
+        }
 
-                // Update reallocated archetypes (archetype pools only)
-                if(PoolElemType.STORAGE_STRATEGY == .ARCHETYPE) {
-                    for(pool.reallocated_archetypes.items) |arch| {
-                        const i = std.mem.indexOfScalar(usize, pool_element.archetype_indices.items, arch) orelse continue;
-                        try self.cache(pool_element, pool, arch, i);
-                    }
+        fn cacheIfMatches(self: *Self, pool_element: anytype, pool: anytype, arch: usize) !void {
+            if(pool_element.access == .Direct) {
+                try self.cache(pool_element, pool, arch, null);
+            } else {
+                const archetype_bitmask = pool.mask_list.items[arch];
+                if(MaskManager.maskContains(archetype_bitmask, Self.MASK)) {
+                    try self.cache(pool_element, pool, arch, null);
                 }
             }
         }

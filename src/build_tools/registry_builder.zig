@@ -147,6 +147,13 @@ fn getFileData(allocator: std.mem.Allocator, fs: *FileStorage, directory: []cons
         }
     }
 
+    // Sort by type name for consistent ordering
+    std.mem.sort(FileData, fs.fileData.items, {}, struct {
+        fn lessThan(_: void, a: FileData, b: FileData) bool {
+            return std.mem.lessThan(u8, a.typeName, b.typeName);
+        }
+    }.lessThan);
+
     return fs.fileData.items.len > 0;
 }
 
