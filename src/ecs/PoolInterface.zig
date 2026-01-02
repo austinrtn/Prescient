@@ -5,6 +5,8 @@ const PM = @import("PoolManager.zig");
 const CR = @import("../registries/ComponentRegistry.zig");
 const MM = @import("MaskManager.zig");
 const EM = @import("EntityManager.zig");
+const EOQ = @import("EntityOperationQueue.zig");
+const EntityOperationType = EOQ.EntityOperationType;
 
 pub fn PoolInterfaceType(comptime pool_name: PR.PoolName) type {
     return struct {
@@ -26,27 +28,45 @@ pub fn PoolInterfaceType(comptime pool_name: PR.PoolName) type {
             };
         }
 
+        /// Creates an entity with the given components (deferred).
+        /// The entity handle is returned immediately, but the entity won't be
+        /// visible in queries until after the next flush.
         pub fn createEntity(self: *Self, component_data: Builder) !EM.Entity {
-            const pool_mask = @TypeOf(self.pool.*).pool_mask;
-            var entity_slot = try self.entity_manager.getNewSlot(undefined, pool_mask, undefined);
+            // Reserve a pending slot - entity handle is valid but marked pending
+            var entity_slot = try self.entity_manager.getNewPendingSlot(Pool.NAME);
 
-            const result = try self.pool.addEntity(entity_slot.getEntity(), component_data);
-            entity_slot.storage_index = result.storage_index;
-            entity_slot.mask_list_index = result.archetype_index;
-            entity_slot.pool_name = Pool.NAME;
+            // Queue the actual creation for later
+            try self.pool.queueEntityCreate(entity_slot.getEntity(), component_data);
 
             return entity_slot.getEntity();
         }
 
+        /// Destroys an entity (deferred).
+        /// The entity remains accessible until the next flush.
         pub fn destroyEntity(self: *Self, entity: EM.Entity) !void {
-            const entity_slot = try self.entity_manager.getSlot(entity);
-            const swapped_entity = try self.pool.removeEntity(entity_slot.mask_list_index, entity_slot.storage_index, entity_slot.pool_name);
+            // Use unchecked access since we need to get the slot even if pending
+            const entity_slot = try self.entity_manager.getSlotUnchecked(entity);
 
-            if(!std.meta.eql(entity_slot.getEntity(), swapped_entity)) {
-                const swapped_slot = try self.entity_manager.getSlot(swapped_entity);
-                swapped_slot.storage_index = entity_slot.storage_index;
+            // Can't destroy an entity that's already pending destroy
+            if (entity_slot.is_pending_destroy) return error.EntityAlreadyPendingDestroy;
+
+            // Can't destroy an entity that hasn't been created yet
+            if (entity_slot.is_pending_create) {
+                // Entity was created then destroyed in same frame - cancel the create
+                // The queueDestroy will handle removing it from create queue
+                try self.pool.queueEntityDestroy(entity, 0, 0);
+                // Release the slot immediately since entity never existed in storage
+                try self.entity_manager.remove(entity_slot);
+                return;
             }
-            try self.entity_manager.remove(entity_slot);
+
+            // Queue destruction - entity remains accessible until flush
+            try self.pool.queueEntityDestroy(
+                entity,
+                entity_slot.storage_index,
+                entity_slot.mask_list_index
+            );
+            entity_slot.is_pending_destroy = true;
         }
 
         pub fn getComponent(self: *Self, entity: EM.Entity, comptime component: CR.ComponentName) !*CR.getTypeByName(component){
@@ -89,12 +109,42 @@ pub fn PoolInterfaceType(comptime pool_name: PR.PoolName) type {
             entity_slot.is_migrating = true;
         }
 
+        /// Flush deferred entity operations (create/destroy).
+        /// Called by PoolManager before flushMigrationQueue.
+        pub fn flushEntityOperations(self: *Self) !void {
+            const results = try self.pool.flushEntityOperations();
+            defer self.pool.allocator.free(results);
+
+            for (results) |result| {
+                switch (result.operation) {
+                    .create => {
+                        // Finalize the pending slot with actual storage location
+                        const slot = try self.entity_manager.getSlotUnchecked(result.entity);
+                        EM.EntityManager.finalizePendingSlot(slot, result.mask_list_index, result.storage_index);
+                    },
+                    .destroy => {
+                        const slot = try self.entity_manager.getSlotUnchecked(result.entity);
+
+                        // Update swapped entity if applicable (archetype pools only)
+                        if (result.swapped_entity) |swapped| {
+                            const swapped_slot = try self.entity_manager.getSlotUnchecked(swapped);
+                            swapped_slot.storage_index = slot.storage_index;
+                        }
+
+                        // Remove entity from manager
+                        try self.entity_manager.remove(slot);
+                    },
+                }
+            }
+        }
+
         pub fn flushMigrationQueue(self: *Self) !void {
             const results = try self.pool.flushMigrationQueue();
             defer self.entity_manager.allocator.free(results);
 
             for (results) |result| {
-                const slot = try self.entity_manager.getSlot(result.entity);
+                // Use unchecked since entities might have pending flags
+                const slot = try self.entity_manager.getSlotUnchecked(result.entity);
 
                 // Comptime dispatch based on pool type
                 if (@hasField(@TypeOf(result), "swapped_entity")) {
@@ -104,7 +154,7 @@ pub fn PoolInterfaceType(comptime pool_name: PR.PoolName) type {
 
                     // Update swapped entity's storage index if a swap occurred
                     if (result.swapped_entity) |swapped| {
-                        const swapped_slot = try self.entity_manager.getSlot(swapped);
+                        const swapped_slot = try self.entity_manager.getSlotUnchecked(swapped);
                         swapped_slot.storage_index = slot.storage_index;
                     }
                 } else {

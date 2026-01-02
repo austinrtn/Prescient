@@ -28,10 +28,10 @@ pub fn ArchetypeCacheType(comptime components: []const CR.ComponentName) type {
         .is_comptime = false,
     };
 
-    //~Field: CompName: []*Component (pointer slices for unified archetype/sparse API)
+    //~Field: CompName: []Component (direct slices for unified archetype/sparse API)
     for(components, 1..) |comp, i| {
         const name = @tagName(comp);
-        const T = []*CR.getTypeByName(comp);
+        const T = []CR.getTypeByName(comp);
         fields[i] = StructField{
             .name = name,
             .type = T,

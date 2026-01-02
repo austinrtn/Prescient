@@ -21,6 +21,9 @@ const MQ = @import("MigrationQueue.zig");
 const MoveDirection = MQ.MoveDirection;
 const MigrationResult = MQ.MigrationResult;
 const StorageStrategy = @import("StorageStrategy.zig").StorageStrategy;
+const EOQ = @import("EntityOperationQueue.zig");
+const EntityOperationType = EOQ.EntityOperationType;
+const EntityOperationResult = EOQ.EntityOperationResult;
 
 const ArrayList = std.ArrayList;
 const Entity = EM.Entity;
@@ -102,6 +105,7 @@ pub fn ArchetypePoolType(comptime config: PoolConfig) type {
 
     const archetype_storage = ComponentArrayStorageType(pool_components);
     const MigrationQueue = MQ.MigrationQueueType(pool_components);
+    const EntityOperationQueue = EOQ.EntityOperationQueueType(EntityBuilderType(req, components_list));
 
     return struct {
         const Self = @This();
@@ -127,6 +131,7 @@ pub fn ArchetypePoolType(comptime config: PoolConfig) type {
         mask_list: ArrayList(MaskManager.Mask),
 
         migration_queue: MigrationQueue,
+        entity_operation_queue: EntityOperationQueue,
         new_archetypes: ArrayList(usize),
         reallocated_archetypes: ArrayList(usize), 
 
@@ -136,6 +141,7 @@ pub fn ArchetypePoolType(comptime config: PoolConfig) type {
                 .archetype_list = ArrayList(archetype_storage){},
                 .mask_list = ArrayList(MaskManager.Mask){},
                 .migration_queue = MigrationQueue.init(allocator),
+                .entity_operation_queue = EntityOperationQueue.init(allocator),
                 .new_archetypes = ArrayList(usize){},
                 .reallocated_archetypes = ArrayList(usize){},
             };
@@ -310,6 +316,75 @@ pub fn ArchetypePoolType(comptime config: PoolConfig) type {
 
             return swapped_entity;
         }
+
+        // ============= Deferred Entity Operations =============
+
+        /// Queue entity for creation - will be processed during flushEntityOperations
+        pub fn queueEntityCreate(self: *Self, entity: Entity, component_data: Builder) !void {
+            try self.entity_operation_queue.queueCreate(entity, component_data);
+        }
+
+        /// Queue entity for destruction - will be processed during flushEntityOperations
+        pub fn queueEntityDestroy(self: *Self, entity: Entity, storage_index: u32, mask_list_index: u32) !void {
+            try self.entity_operation_queue.queueDestroy(entity, storage_index, mask_list_index);
+        }
+
+        /// Process all queued entity operations.
+        /// Destroys are processed first (in reverse order to avoid index invalidation),
+        /// then creates are processed.
+        /// Returns slice of results for EntityManager to update slots.
+        pub fn flushEntityOperations(self: *Self) ![]EntityOperationResult {
+            if (!self.entity_operation_queue.hasQueuedOperations()) {
+                return &.{};
+            }
+
+            var results = ArrayList(EntityOperationResult){};
+
+            // Sort destroy queue by storage_index descending to avoid index invalidation
+            std.mem.sort(
+                EntityOperationQueue.DestroyEntry,
+                self.entity_operation_queue.destroy_queue.items,
+                {},
+                struct {
+                    fn lessThan(_: void, a: EntityOperationQueue.DestroyEntry, b: EntityOperationQueue.DestroyEntry) bool {
+                        return a.storage_index > b.storage_index; // Descending
+                    }
+                }.lessThan
+            );
+
+            // Process destroys first
+            for (self.entity_operation_queue.destroy_queue.items) |entry| {
+                const swapped_entity = try self.removeEntity(
+                    entry.mask_list_index,
+                    entry.storage_index,
+                    NAME
+                );
+                try results.append(self.allocator, .{
+                    .operation = .destroy,
+                    .entity = entry.entity,
+                    .storage_index = undefined,
+                    .mask_list_index = undefined,
+                    .swapped_entity = if (std.meta.eql(entry.entity, swapped_entity)) null else swapped_entity,
+                });
+            }
+
+            // Then process creates
+            for (self.entity_operation_queue.create_queue.items) |entry| {
+                const result = try self.addEntity(entry.entity, entry.component_data);
+                try results.append(self.allocator, .{
+                    .operation = .create,
+                    .entity = entry.entity,
+                    .storage_index = result.storage_index,
+                    .mask_list_index = result.archetype_index,
+                    .swapped_entity = null,
+                });
+            }
+
+            self.entity_operation_queue.clear();
+            return try results.toOwnedSlice(self.allocator);
+        }
+
+        // ============= End Deferred Entity Operations =============
 
         pub fn getComponent(
             self: *Self,
@@ -631,8 +706,9 @@ pub fn ArchetypePoolType(comptime config: PoolConfig) type {
             self.new_archetypes.deinit(self.allocator);
             self.reallocated_archetypes.deinit(self.allocator);
 
-            // Clean up migration queue
+            // Clean up queues
             self.migration_queue.deinit();
+            self.entity_operation_queue.deinit();
         }
 
         fn checkIfEntInPool(pool_name: PoolName) bool {

@@ -53,19 +53,13 @@ pub fn QueryType(comptime components: []const CR.ComponentName) type {
             inline for(std.meta.fields(QResultType)) |field| {
                 const pool_element = &@field(self.query_storage, field.name);
 
-                // Free pointer arrays in archetype_cache
-                for(pool_element.archetype_cache.items) |arch_cache| {
-                    inline for(std.meta.fields(@TypeOf(arch_cache))) |cache_field| {
-                        self.allocator.free(@field(arch_cache, cache_field.name));
-                    }
-                }
-
+                // Archetype caches are now direct slices into pool storage - no allocations to free
                 pool_element.archetype_indices.deinit(self.allocator);
                 pool_element.archetype_cache.deinit(self.allocator);
                 pool_element.sparse_cache.deinit(self.allocator);
             }
 
-            // Free sparse batch allocations
+            // Free sparse batch allocations (these are copied values, not slices)
             for(self.sparse_batch_allocs.items) |batch| {
                 inline for(std.meta.fields(@TypeOf(batch))) |batch_field| {
                     self.allocator.free(@field(batch, batch_field.name));
@@ -134,39 +128,24 @@ pub fn QueryType(comptime components: []const CR.ComponentName) type {
                 try pool_element.sparse_cache.append(self.allocator, archetype_index);
             }
         }
-        ///Convert archetype storage into Query Struct and append it to query cache
+        /// Convert archetype storage into Query Struct and append it to query cache
+        /// Uses direct slices into storage - no allocations needed
         fn cacheArchetype(self: *Self, pool_element: anytype, pool: anytype, archetype_index: usize, index_in_pool_elem: ?usize) !void {
             const ArchCacheType = comptime QT.ArchetypeCacheType(components);
             var archetype_cache: ArchCacheType = undefined;
             const storage = &pool.archetype_list.items[archetype_index];
 
-            // Build entities slice
-            const entities_slice = storage.entities.items;
-            const entities_array = try self.allocator.alloc(EM.Entity, entities_slice.len);
-            @memcpy(entities_array, entities_slice);
-            archetype_cache.entities = entities_array;
+            // Direct slice into entities storage
+            archetype_cache.entities = storage.entities.items;
 
-            // Build pointer arrays for each component
+            // Direct slices into component storage
             inline for(components) |comp| {
                 const field_name = @tagName(comp);
-                const ComponentType = CR.getTypeByName(comp);
-                const value_slice = @field(storage, field_name).?.items;
-
-                // Allocate pointer array
-                const ptr_array = try self.allocator.alloc(*ComponentType, value_slice.len);
-                for (value_slice, 0..) |*item, idx| {
-                    ptr_array[idx] = item;
-                }
-                @field(archetype_cache, field_name) = ptr_array;
+                @field(archetype_cache, field_name) = @field(storage, field_name).?.items;
             }
 
             if(index_in_pool_elem) |indx|{
-                // Re-caching existing archetype - free old pointer arrays first
-                const old_cache = pool_element.archetype_cache.items[indx];
-                self.allocator.free(old_cache.entities);
-                inline for(components) |comp| {
-                    self.allocator.free(@field(old_cache, @tagName(comp)));
-                }
+                // Re-caching existing archetype - just overwrite (no allocations to free)
                 pool_element.archetype_cache.items[indx] = archetype_cache;
             }
             else{
@@ -236,13 +215,13 @@ pub fn QueryType(comptime components: []const CR.ComponentName) type {
 
                                 inline for(components) |component| {
                                     const ComponentType = CR.getTypeByName(component);
-                                    // Allocate pointer array
-                                    const ptr_array = self.allocator.alloc(*ComponentType, storage_indexes.items.len) catch unreachable;
+                                    // Allocate value array and copy values (sparse storage isn't contiguous)
+                                    const value_array = self.allocator.alloc(ComponentType, storage_indexes.items.len) catch unreachable;
 
                                     for (storage_indexes.items, 0..) |ent_index, idx| {
-                                        ptr_array[idx] = &@field(pool.storage, @tagName(component)).items[ent_index].?;
+                                        value_array[idx] = @field(pool.storage, @tagName(component)).items[ent_index].?;
                                     }
-                                    @field(batch, @tagName(component)) = ptr_array;
+                                    @field(batch, @tagName(component)) = value_array;
                                 }
 
                                 self.archetype_index += 1;

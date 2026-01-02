@@ -2,6 +2,8 @@ const std = @import("std");
 const PR = @import("../registries/PoolRegistry.zig");
 const em = @import("EntityManager.zig");
 const MaskManager = @import("MaskManager.zig").GlobalMaskManager;
+const EOQ = @import("EntityOperationQueue.zig");
+const EntityOperationType = EOQ.EntityOperationType;
 
 const pool_storage_type = blk: {
     var fields: [PR.pool_types.len]std.builtin.Type.StructField = undefined;
@@ -75,6 +77,18 @@ pub const PoolManager = struct {
         }
 
         pub fn flushAllPools(self: *Self, entity_manager: *em.EntityManager) !void {
+            // First: flush entity operations (creates/destroys)
+            inline for(0..PR.pool_types.len) |i| {
+                const pool_enum:PR.PoolName = @enumFromInt(i);
+                const name = @tagName(pool_enum);
+
+                const storage_field = @field(self.storage, name);
+                if(storage_field) |pool| {
+                    try Self.flushEntityOperations(pool, entity_manager);
+                }
+            }
+
+            // Then: flush migrations (component add/remove)
             inline for(0..PR.pool_types.len) |i| {
                 const pool_enum:PR.PoolName = @enumFromInt(i);
                 const name = @tagName(pool_enum);
@@ -86,12 +100,40 @@ pub const PoolManager = struct {
             }
         }
 
+        pub fn flushEntityOperations(pool: anytype, entity_manager: *em.EntityManager) !void {
+            const flush_results = try pool.flushEntityOperations();
+            defer pool.allocator.free(flush_results);
+
+            for(flush_results) |result| {
+                switch (result.operation) {
+                    .create => {
+                        // Finalize the pending slot with actual storage location
+                        const slot = try entity_manager.getSlotUnchecked(result.entity);
+                        em.EntityManager.finalizePendingSlot(slot, result.mask_list_index, result.storage_index);
+                    },
+                    .destroy => {
+                        const slot = try entity_manager.getSlotUnchecked(result.entity);
+
+                        // Update swapped entity if applicable (archetype pools only)
+                        if (result.swapped_entity) |swapped| {
+                            const swapped_slot = try entity_manager.getSlotUnchecked(swapped);
+                            swapped_slot.storage_index = slot.storage_index;
+                        }
+
+                        // Remove entity from manager
+                        try entity_manager.remove(slot);
+                    },
+                }
+            }
+        }
+
         pub fn flushMigrationQueue(pool: anytype, entity_manager: *em.EntityManager) !void {
             const flush_results = try pool.flushMigrationQueue();
             defer pool.allocator.free(flush_results);
 
             for(flush_results) |result| {
-                var slot = try entity_manager.getSlot(result.entity);
+                // Use unchecked since entities might have pending flags
+                var slot = try entity_manager.getSlotUnchecked(result.entity);
 
                 // Comptime dispatch based on pool type
                 if (@hasField(@TypeOf(result), "swapped_entity")) {
@@ -101,7 +143,7 @@ pub const PoolManager = struct {
                     slot.storage_index = result.storage_index;
 
                     if(result.swapped_entity) |swapped_ent| {
-                        const swapped_slot = try entity_manager.getSlot(swapped_ent);
+                        const swapped_slot = try entity_manager.getSlotUnchecked(swapped_ent);
                         swapped_slot.storage_index = storage_index_holder;
                     }
                 } else {

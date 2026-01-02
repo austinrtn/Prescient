@@ -73,6 +73,9 @@ const MigrationQueueType = MQ.MigrationQueueType;
 const MigrationEntryType = MQ.MigrationEntryType;
 const PoolInterfaceType = @import("PoolInterface.zig").PoolInterfaceType;
 const StorageStrategy = @import("StorageStrategy.zig").StorageStrategy;
+const EOQ = @import("EntityOperationQueue.zig");
+const EntityOperationType = EOQ.EntityOperationType;
+const EntityOperationResult = EOQ.EntityOperationResult;
 
 /// Maps an entity's storage location to its virtual archetype membership.
 ///
@@ -187,6 +190,7 @@ pub fn SparseSetPoolType(comptime config: PoolConfig) type {
 
     const POOL_MASK = comptime MaskManager.Comptime.createMask(pool_components);
     const MigrationQueue = MQ.MigrationQueueType(pool_components);
+    const EntityOperationQueue = EOQ.EntityOperationQueueType(EntityBuilderType(req, components_list));
 
     const Storage = StorageType(pool_components);
 
@@ -231,6 +235,10 @@ pub fn SparseSetPoolType(comptime config: PoolConfig) type {
         /// Call `flushMigrationQueue()` to apply all pending changes.
         migration_queue: MigrationQueue,
 
+        /// Deferred entity create/destroy operations.
+        /// Batches entity operations to avoid mid-iteration storage changes.
+        entity_operation_queue: EntityOperationQueue,
+
         /// Indices of newly created virtual archetypes since last query cache update.
         /// Queries use this to know which archetypes need evaluation.
         new_archetypes: ArrayList(usize),
@@ -248,6 +256,7 @@ pub fn SparseSetPoolType(comptime config: PoolConfig) type {
             self.virtual_archetypes = .{};
             self.empty_indexes = .{};
             self.migration_queue = MigrationQueue.init(allocator);
+            self.entity_operation_queue = EntityOperationQueue.init(allocator);
             self.new_archetypes = .{};
 
             // Initialize all storage arrays (entities, bitmask_map, and each component)
@@ -274,6 +283,7 @@ pub fn SparseSetPoolType(comptime config: PoolConfig) type {
             self.mask_list.deinit(self.allocator);
             self.empty_indexes.deinit(self.allocator);
             self.migration_queue.deinit();
+            self.entity_operation_queue.deinit();
             self.new_archetypes.deinit(self.allocator);
         }
 
@@ -431,6 +441,62 @@ pub fn SparseSetPoolType(comptime config: PoolConfig) type {
 
             return entity;
         }
+
+        // ============= Deferred Entity Operations =============
+
+        /// Queue entity for creation - will be processed during flushEntityOperations
+        pub fn queueEntityCreate(self: *Self, entity: Entity, component_data: Builder) !void {
+            try self.entity_operation_queue.queueCreate(entity, component_data);
+        }
+
+        /// Queue entity for destruction - will be processed during flushEntityOperations
+        pub fn queueEntityDestroy(self: *Self, entity: Entity, storage_index: u32, mask_list_index: u32) !void {
+            try self.entity_operation_queue.queueDestroy(entity, storage_index, mask_list_index);
+        }
+
+        /// Process all queued entity operations.
+        /// For sparse set pools, order doesn't matter since indices are stable.
+        /// Returns slice of results for EntityManager to update slots.
+        pub fn flushEntityOperations(self: *Self) ![]EntityOperationResult {
+            if (!self.entity_operation_queue.hasQueuedOperations()) {
+                return &.{};
+            }
+
+            var results = ArrayList(EntityOperationResult){};
+
+            // Process destroys first (order doesn't matter for sparse - indices are stable)
+            for (self.entity_operation_queue.destroy_queue.items) |entry| {
+                _ = try self.removeEntity(
+                    entry.mask_list_index,
+                    entry.storage_index,
+                    NAME
+                );
+                try results.append(self.allocator, .{
+                    .operation = .destroy,
+                    .entity = entry.entity,
+                    .storage_index = undefined,
+                    .mask_list_index = undefined,
+                    .swapped_entity = null, // Sparse pools don't swap
+                });
+            }
+
+            // Then process creates
+            for (self.entity_operation_queue.create_queue.items) |entry| {
+                const result = try self.addEntity(entry.entity, entry.component_data);
+                try results.append(self.allocator, .{
+                    .operation = .create,
+                    .entity = entry.entity,
+                    .storage_index = result.storage_index,
+                    .mask_list_index = result.archetype_index,
+                    .swapped_entity = null,
+                });
+            }
+
+            self.entity_operation_queue.clear();
+            return try results.toOwnedSlice(self.allocator);
+        }
+
+        // ============= End Deferred Entity Operations =============
 
         /// Queues a component addition or removal for deferred processing.
         ///

@@ -2,11 +2,10 @@ const std = @import("std");
 const SR = @import("../registries/SystemRegistry.zig");
 const PM = @import("PoolManager.zig");
 
-const SystemManagerStorage = blk: {
-    const system_names = std.meta.tags(SR.SystemName);
-    var fields:[SR.SystemTypes.len]std.builtin.Type.StructField = undefined;
+fn SystemManagerStorage(comptime systems: []const SR.SystemName) type {
+    var fields:[systems.len]std.builtin.Type.StructField = undefined;
 
-    for(system_names, 0..) |system, i| {
+    for(systems, 0..) |system, i| {
         const name = @tagName(system);
         const T = SR.getTypeByName(system);
 
@@ -19,7 +18,7 @@ const SystemManagerStorage = blk: {
         };
     }
 
-    break :blk @Type(std.builtin.Type{
+    return @Type(std.builtin.Type{
         .@"struct" = .{
             .fields = &fields,
             .backing_integer = null,
@@ -28,92 +27,93 @@ const SystemManagerStorage = blk: {
             .layout = .auto,
         }
     });
-};
+}
 
+pub fn SystemManager(comptime systems: []const SR.SystemName) type {
+    return struct {
+        const Self = @This();
+        allocator: std.mem.Allocator,
+        storage: SystemManagerStorage(systems),
+        pool_manager: *PM.PoolManager,
 
-pub const SystemManager = struct {
-    const Self = @This();
-    allocator: std.mem.Allocator,
-    storage: SystemManagerStorage,
-    pool_manager: *PM.PoolManager,
+        pub fn init(allocator: std.mem.Allocator, pool_manager: *PM.PoolManager) !Self {
+            var self: Self = undefined;
+            self.allocator = allocator;
+            self.pool_manager = pool_manager;
+            var storage: SystemManagerStorage(systems) = undefined;
 
-    pub fn init(allocator: std.mem.Allocator, pool_manager: *PM.PoolManager) !Self {
-        var self: Self = undefined;
-        self.allocator = allocator;
-        self.pool_manager = pool_manager;
+            inline for(systems, 0..) |_, i| {
+                const SystemType = SR.getTypeByName(systems[i]);
+                var sys_instance: SystemType = undefined;
 
-        var storage: SystemManagerStorage = undefined;
-        inline for(std.meta.tags(SR.SystemName), 0..) |_, i| {
-            const SystemType = SR.SystemTypes[i];
-            var sys_instance: SystemType = undefined;
+                // Set allocator and active directly (undefined doesn't apply defaults)
+                sys_instance.allocator = allocator;
+                if (@hasField(SystemType, "active")) {
+                    sys_instance.active = true;
+                }
 
-            // Set allocator and active directly (undefined doesn't apply defaults)
-            sys_instance.allocator = allocator;
-            if (@hasField(SystemType, "active")) {
-                sys_instance.active = true;
+                // Initialize all queries via reflection
+                inline for(std.meta.fields(@TypeOf(sys_instance.queries))) |field| {
+                    @field(sys_instance.queries, field.name) = try field.type.init(allocator, pool_manager);
+                }
+
+                @field(storage, @tagName(systems[i])) = sys_instance;
             }
+            self.storage = storage;
 
-            // Initialize all queries via reflection
-            inline for(std.meta.fields(@TypeOf(sys_instance.queries))) |field| {
-                @field(sys_instance.queries, field.name) = try field.type.init(allocator, pool_manager);
-            }
-
-            @field(storage, std.meta.fields(SystemManagerStorage)[i].name) = sys_instance;
+            return self;
         }
-        self.storage = storage;
 
-        return self;
-    }
-
-    pub fn initializeSystems(self: *Self) !void {
-        inline for (std.meta.fields(SystemManagerStorage)) |field| {
-            const SystemType = @TypeOf(@field(self.storage, field.name));
-            if (std.meta.hasFn(SystemType, "init")) {
-                var system = &@field(self.storage, field.name);
-                try system.init();
+        pub fn initializeSystems(self: *Self) !void {
+            inline for(systems) |system| {
+                const SystemType = @TypeOf(@field(self.storage, @tagName(system)));
+                if (std.meta.hasFn(SystemType, "init")) {
+                    var sys = &@field(self.storage, @tagName(system));
+                    try sys.init();
+                }
             }
         }
-    }
 
-    pub fn deinit(self: *Self) void {
-        inline for(std.meta.fields(SystemManagerStorage)) |field| {
-            var system = &@field(self.storage, field.name);
+        pub fn deinit(self: *Self) void {
+            inline for(systems) |system| {
+                var system_instance = &@field(self.storage, @tagName(system));
+                inline for(std.meta.fields(@TypeOf(system_instance.queries))) |query_field| {
+                    @field(system_instance.queries, query_field.name).deinit();
+                }
+            }
+        }
+
+        pub fn deinitializeSystems(self: *Self) void {
+            inline for (systems) |system| {
+                const SystemType = @TypeOf(@field(self.storage, @tagName(system)));
+                if (std.meta.hasFn(SystemType, "deinit")) {
+                    var sys = &@field(self.storage, @tagName(system));
+                    sys.deinit();
+                }
+            }
+        }
+        fn updateSystemQueries(self: *Self, system: anytype) !void {
+            _ = self;
             inline for(std.meta.fields(@TypeOf(system.queries))) |query_field| {
-                @field(system.queries, query_field.name).deinit();
+                try @field(system.queries, query_field.name).update();
             }
         }
-    }
 
-    pub fn deinitializeSystems(self: *Self) void {
-        inline for (std.meta.fields(SystemManagerStorage)) |field| {
-            const SystemType = @TypeOf(@field(self.storage, field.name));
-            if (std.meta.hasFn(SystemType, "deinit")) {
-                var system = &@field(self.storage, field.name);
-                system.deinit();
+        pub fn getSystem(self: *Self, comptime system: SR.SystemName) *SR.getTypeByName(system) {
+            const field_name = @tagName(system);
+            return &@field(self.storage, field_name);
+        }
+
+        pub fn update(self: *Self) !void {
+            inline for(systems) |system| {
+                var sys = &@field(self.storage, @tagName(system));
+                // Check if system should run (active field or no active field = always run)
+                const should_run = if (@hasField(@TypeOf(sys.*), "active")) sys.active else true;
+                if (should_run) {
+                    try self.updateSystemQueries(sys);
+                    try sys.update();
+                }
             }
         }
-    }
-    fn updateSystemQueries(self: *Self, system: anytype) !void {
-        _ = self;
-        inline for(std.meta.fields(@TypeOf(system.queries))) |query_field| {
-            try @field(system.queries, query_field.name).update();
-        }
-    }
-
-    pub fn getSystem(self: *Self, comptime system: SR.SystemName) *SR.getTypeByName(system) {
-        const field_name = @tagName(system);
-        return &@field(self.storage, field_name);
-    }
-
-    pub fn update(self: *Self) !void {
-        inline for(std.meta.fields(SystemManagerStorage)) |field| {
-            var system = &@field(self.storage, field.name);
-            // Check if system should run (active field or no active field = always run)
-            const should_run = if (@hasField(@TypeOf(system.*), "active")) system.active else true;
-            if (should_run) {
-                try self.updateSystemQueries(system);
-                try system.update();
-            }
-        }
-    }
-};
+    };
+}

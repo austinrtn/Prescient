@@ -18,6 +18,8 @@ pub const EntitySlot = struct {
     index: u32,
     generation: u32 = 0,
     is_migrating: bool = false,
+    is_pending_create: bool = false,  // Entity reserved but not yet in storage
+    is_pending_destroy: bool = false, // Entity queued for destruction
 
     pool_name: PoolName = undefined,
     mask_list_index: u32 = undefined,
@@ -48,12 +50,21 @@ pub const EntityManager = struct {
     pub fn getSlot(self: *Self, entity: Entity) !*EntitySlot {
         const slot = &self.entity_slots.items[entity.index];
         if (slot.generation != entity.generation) return error.StaleEntity;
+        if (slot.is_pending_create) return error.EntityPendingCreate;
+        if (slot.is_pending_destroy) return error.EntityPendingDestroy;
+        return slot;
+    }
+
+    /// Get slot without checking pending flags - for internal use during flush
+    pub fn getSlotUnchecked(self: *Self, entity: Entity) !*EntitySlot {
+        const slot = &self.entity_slots.items[entity.index];
+        if (slot.generation != entity.generation) return error.StaleEntity;
         return slot;
     }
 
     pub fn getNewSlot(
-            self: *Self, 
-            pool_name: PoolName, 
+            self: *Self,
+            pool_name: PoolName,
             mask_list_index: u32,
             storage_index: u32,
         ) !*EntitySlot {
@@ -66,7 +77,7 @@ pub const EntityManager = struct {
                 .generation = 0,
                 .pool_name = pool_name,
                 .mask_list_index = mask_list_index,
-                .storage_index = storage_index, 
+                .storage_index = storage_index,
             });
             break :blk new_index;
         };
@@ -75,8 +86,42 @@ pub const EntityManager = struct {
         return slot;
     }
 
+    /// Reserve a slot for a pending entity creation.
+    /// The entity handle is valid but marked as pending until finalized.
+    pub fn getNewPendingSlot(self: *Self, pool_name: PoolName) !*EntitySlot {
+        const index = if (self.available_entities.pop()) |indx|
+            indx
+        else blk: {
+            const new_index = @as(u32, @intCast(self.entity_slots.items.len));
+            try self.entity_slots.append(self.allocator, .{
+                .index = new_index,
+                .generation = 0,
+                .pool_name = pool_name,
+                .mask_list_index = undefined,
+                .storage_index = undefined,
+                .is_pending_create = true,
+            });
+            break :blk new_index;
+        };
+
+        const slot = &self.entity_slots.items[index];
+        slot.pool_name = pool_name;
+        slot.is_pending_create = true;
+        slot.is_pending_destroy = false;
+        return slot;
+    }
+
+    /// Finalize a pending slot after entity is actually created in storage.
+    pub fn finalizePendingSlot(slot: *EntitySlot, mask_list_index: u32, storage_index: u32) void {
+        slot.mask_list_index = mask_list_index;
+        slot.storage_index = storage_index;
+        slot.is_pending_create = false;
+    }
+
     pub fn remove(self: *Self, slot: *EntitySlot) !void {
         slot.generation +%= 1;
+        slot.is_pending_create = false;
+        slot.is_pending_destroy = false;
         try self.available_entities.append(self.allocator, slot.index);
     }
 
