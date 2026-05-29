@@ -11,10 +11,10 @@ const Config = @import("PoolRegistry.zig").Config;
 
 pub fn EntPool(comptime config: Config) type {
     const pool_comps = config.components;
-    const Archetype = ArchetypeStorageT(pool_comps);
 
     return struct {
         const Self = @This();
+        pub const Archetype = ArchetypeStorageT(pool_comps);
         const HashmapType = struct{CR.BitSet, Archetype};
         pub const pool_mask = getBitmask(pool_comps);
 
@@ -44,31 +44,6 @@ pub fn EntPool(comptime config: Config) type {
             try arch.append(ent);
         }
 
-        pub fn getItems(self: *Self, comptime components: []const Component) !CR.GetTypeOfComponents(components, true) {
-            const SuperArch = CR.GetTypeOfComponents(components, true);
-            const allocator = self.allocator;
-
-            const comp_mask = comptime getBitmask(components);
-            const arches = try self.getArchetypesContainingBitset(comp_mask);
-            defer allocator.free(arches);
-
-            var super_arch: SuperArch = undefined;
-
-            inline for(std.meta.fields(SuperArch)) |field| {
-                var last_count: usize = 0;
-                var count: usize = 0;
-
-                for(arches) |arch| {
-                    last_count = count;
-                    count += arch.len;
-                    const super_slice = &@field(super_arch, field.name);
-                    super_slice = try allocator.realloc(super_slice, count);
-
-                    @memcpy(super_slice[last_count..count], @field(arch, field.name));
-                }
-            }
-        }
-
         fn getArchetypesContainingBitset(self: Self, comptime mask: CR.BitSet) ![]*Archetype {
             var matches: ArrayList(*Archetype) = .empty;
             defer matches.deinit(self.allocator);
@@ -94,3 +69,28 @@ pub fn EntPool(comptime config: Config) type {
         }
     };
 }
+
+// pub fn getItems(self: *Self, comptime components: []const Component) !CR.GetTypeOfComponents(components, true) {
+//     const SuperArch = CR.GetTypeOfComponents(components, true);
+//     const allocator = self.allocator;
+
+//     const comp_mask = comptime getBitmask(components);
+//     const arches = try self.getArchetypesContainingBitset(comp_mask);
+//     defer allocator.free(arches);
+
+//     var super_arch: SuperArch = undefined;
+
+//     inline for(std.meta.fields(SuperArch)) |field| {
+//         var last_count: usize = 0;
+//         var count: usize = 0;
+
+//         for(arches) |arch| {
+//             last_count = count;
+//             count += arch.len;
+//             const super_slice = &@field(super_arch, field.name);
+//             super_slice = try allocator.realloc(super_slice, count);
+
+//             @memcpy(super_slice[last_count..count], @field(arch, field.name));
+//         }
+//     }
+// }
