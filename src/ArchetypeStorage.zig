@@ -12,21 +12,22 @@ pub fn Archetype(comptime components: []const Component) type {
     return struct {
         const Self = @This();
 
+        pub const Components = components;
         pub const mask = bit_mask;
         allocator: std.mem.Allocator,
-        comp_fields: CompFields = undefined,
+        storage: CompFields = undefined,
         len: usize = 0,
 
         pub fn init(allocator: std.mem.Allocator) Self {
             var self: Self = .{.allocator = allocator};
-            inline for(CompStructFields) |field| @field(self.comp_fields, field.name) = .empty;
+            inline for(CompStructFields) |field| @field(self.storage, field.name) = .empty;
 
             return self;
         }
 
         pub fn deinit(self: *Self) void {
             inline for(CompStructFields) |field| {
-                @field(self.comp_fields, field.name).deinit(self.allocator);
+                @field(self.storage, field.name).deinit(self.allocator);
             }
         }
 
@@ -36,7 +37,7 @@ pub fn Archetype(comptime components: []const Component) type {
             inline for(std.meta.fields(EntT)) |field| {
                 if(@hasField(CompFields, field.name)) {
                     const ent_field = @field(ent, field.name);
-                    try @field(self.comp_fields, field.name).append(self.allocator, ent_field);
+                    try @field(self.storage, field.name).append(self.allocator, ent_field);
                 }
             }
             self.len += 1;
@@ -45,7 +46,7 @@ pub fn Archetype(comptime components: []const Component) type {
         pub fn getFields(self: *Self) EntTypeSlices {
             var slices: EntTypeSlices = undefined;
             inline for(std.meta.fields(EntTypeSlices)) |field| {
-                const list = &@field(self.comp_fields, field.name);
+                const list = &@field(self.storage, field.name);
                 @field(slices, field.name) = list.items;
             }
             return slices;

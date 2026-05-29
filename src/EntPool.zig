@@ -7,6 +7,7 @@ const getBitmask = CR.getBitmaskOfComponents;
 const ArchetypeStorageT = @import("ArchetypeStorage.zig").Archetype;
 const Component = CR.Enum;
 const CR = ComponentRegistry;
+const PR = @import("PoolRegistry.zig").PoolRegistry;
 const Config = @import("PoolRegistry.zig").Config;
 
 pub fn EntPool(comptime config: Config) type {
@@ -15,8 +16,10 @@ pub fn EntPool(comptime config: Config) type {
     return struct {
         const Self = @This();
         pub const Archetype = ArchetypeStorageT(pool_comps);
-        const HashmapType = struct{CR.BitSet, Archetype};
+        pub const tag = std.meta.stringToEnum(PR.Enum, config.name);
+        
         pub const pool_mask = getBitmask(pool_comps);
+        const HashmapType = struct{CR.BitSet, Archetype};
 
         allocator: std.mem.Allocator,
         archetypes: HashMap(CR.BitSet, Archetype) = undefined,
@@ -44,22 +47,25 @@ pub fn EntPool(comptime config: Config) type {
             try arch.append(ent);
         }
 
-        fn getArchetypesContainingBitset(self: Self, comptime mask: CR.BitSet) ![]*Archetype {
-            var matches: ArrayList(*Archetype) = .empty;
+        pub fn getArchetypesContainingBitset(self: Self, mask: CR.BitSet) ![]CR.BitSet {
+            var matches: ArrayList(CR.BitSet) = .empty;
             defer matches.deinit(self.allocator);
 
-            var pairs = self.archetypes.iterator();
+            var keys = self.archetypes.keyIterator();
 
-            while(pairs.next()) |entry| {
-                const entry_mask = entry.key_ptr;
-                const arch = entry.value_ptr;
-                if(entry_mask.intersects(mask.initComplement())) try matches.append(arch);
+            while(keys.next()) |arch_mask| {
+                var temp = arch_mask.intersectWith(mask);
+                if(temp.eql(mask)) try matches.append(self.allocator, arch_mask.*);
             }
 
             return matches.toOwnedSlice(self.allocator);
         }
 
-        fn getOrCreateArchetype(self: *Self, comptime ent_mask: CR.BitSet) !*Archetype {
+        pub fn getArchetype(self: *Self, ent_mask: CR.BitSet) *Archetype {
+            return self.archetypes.getPtr(ent_mask) orelse unreachable;
+        }
+
+        fn getOrCreateArchetype(self: *Self, ent_mask: CR.BitSet) !*Archetype {
             const archetype = self.archetypes.getPtr(ent_mask);
             return archetype orelse blk: {
                 const new_arch: Archetype = .init(self.allocator);

@@ -13,6 +13,7 @@ pub const PoolRegistry = PoolRegistryT(&Pools);
 fn PoolRegistryT(comptime pool_configs: []const Config) type {
     return struct {
         pub const Enum = PoolEnumT(pool_configs);
+        pub const Tags = std.meta.tags(Enum);
         pub const Types = PoolTypes(pool_configs);
         pub const Conifg = Config;
 
