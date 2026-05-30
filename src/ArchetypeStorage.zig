@@ -4,8 +4,9 @@ const ComponentRegistry = @import("ComponentRegistry.zig").ComponentRegistry;
 const Component = ComponentRegistry.Enum;
 
 pub fn Archetype(comptime components: []const Component) type {
-    const CompFields = compsToArrayList(components);
-    const CompStructFields = std.meta.fields(CompFields);
+    const Storage = getStorageType(components);
+    const StorageFields = std.meta.fields(Storage);
+    const CompStructFields = std.meta.fields(Storage);
     const EntTypeSlices = ComponentRegistry.GetTypeOfComponents(components, true);
     const bit_mask = ComponentRegistry.getBitmaskOfComponents(components);
 
@@ -15,7 +16,7 @@ pub fn Archetype(comptime components: []const Component) type {
         pub const Components = components;
         pub const mask = bit_mask;
         allocator: std.mem.Allocator,
-        storage: CompFields = undefined,
+        storage: Storage = undefined,
         len: usize = 0,
 
         pub fn init(allocator: std.mem.Allocator) Self {
@@ -35,12 +36,21 @@ pub fn Archetype(comptime components: []const Component) type {
             const EntT = @TypeOf(ent);
 
             inline for(std.meta.fields(EntT)) |field| {
-                if(@hasField(CompFields, field.name)) {
+                if(@hasField(Storage, field.name)) {
                     const ent_field = @field(ent, field.name);
                     try @field(self.storage, field.name).append(self.allocator, ent_field);
                 }
             }
             self.len += 1;
+        }
+
+        pub fn remove(self: *Self, ent_index: u32) u32 {
+            const idx: usize = @intCast(ent_index);
+
+            inline for(StorageFields) |field| {
+                const comp_list: *ArrayList() = &@field(self.storage, field.name);
+                
+            }
         }
 
         pub fn getFields(self: *Self) EntTypeSlices {
@@ -54,7 +64,7 @@ pub fn Archetype(comptime components: []const Component) type {
     };
 }
 
-fn compsToArrayList(comptime components: []const Component) type {
+fn getStorageType(comptime components: []const Component) type {
     var names: [components.len][]const u8 = undefined;
     var types: [components.len]type = undefined;
     var attrs: [components.len]std.builtin.Type.StructField.Attributes = undefined;
