@@ -16,8 +16,12 @@ pub fn ComponentRegistryT(comptime comp_descs: []const ComponentDesc) type {
         pub const BitSet = std.StaticBitSet(comp_descs.len);
         const string_type_map = stringTypeMap(comp_descs);
 
-        pub fn GetTypeByField(comptime component: Enum) type {
+        pub fn getCompTypeByEnum(comptime component: Enum) type {
             return string_type_map.get(@tagName(component)) orelse unreachable;
+        }
+        
+        pub fn GetCompTypeByName(comptime component: []const u8) type {
+            return string_type_map.get(component) orelse unreachable;
         }
 
         pub fn getBitmaskOfComponents(comptime components: []const Enum) BitSet {
@@ -36,13 +40,35 @@ pub fn ComponentRegistryT(comptime comp_descs: []const ComponentDesc) type {
             return comps;
         }
 
+        pub fn getBitmaskFromEnt(comptime EntType: type) BitSet {
+            const comps = getComponentsFromType(EntType);
+            return getBitmaskOfComponents(&comps);
+        }
+
+        pub fn convertAnomToComponent(anom: anytype, comptime comp_name: []const u8) GetCompTypeByName(comp_name) {
+            const AnomType = @TypeOf(anom);
+            const CompType = GetCompTypeByName(comp_name); 
+            var comp: CompType = undefined; 
+            
+            if(@typeInfo(CompType) == .@"struct") {
+                inline for(std.meta.fields(CompType)) |field| {
+                    if(!@hasField(AnomType, field.name)) {
+                        @compileError("Anom Component " ++ comp_name ++ " is missing field: " ++ field.name);
+                    }
+                    @field(comp, field.name) = @field(anom, field.name);
+                }
+            } else comp = anom;
+
+            return comp;
+        }
+
         pub fn GetTypeOfComponents(comptime components: []const Enum, comptime get_slices: bool) type {
             var names: [components.len][]const u8 = undefined;
             var types: [components.len]type = undefined;
             var attrs: [components.len]std.builtin.Type.StructField.Attributes = undefined;
 
             for(components, 0..) |comp, i| {
-                const CompType = GetTypeByField(comp);
+                const CompType = getCompTypeByEnum(comp);
                 const T = if(get_slices) []CompType else CompType;
                 names[i] = @tagName(comp);
                 types[i] = T;

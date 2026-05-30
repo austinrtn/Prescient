@@ -16,6 +16,7 @@ pub fn Archetype(comptime components: []const Component) type {
         pub const Components = components;
         pub const mask = bit_mask;
         allocator: std.mem.Allocator,
+        global_ids: ArrayList(u32) = .empty,
         storage: Storage = undefined,
         len: usize = 0,
 
@@ -30,27 +31,34 @@ pub fn Archetype(comptime components: []const Component) type {
             inline for(CompStructFields) |field| {
                 @field(self.storage, field.name).deinit(self.allocator);
             }
+            self.global_ids.deinit(self.allocator);
         }
 
-        pub fn append(self: *Self, ent: anytype) !void {
+        pub fn append(self: *Self, ent: anytype, global_id: u32) !void {
             const EntT = @TypeOf(ent);
 
+            try self.global_ids.append(self.allocator, global_id);
             inline for(std.meta.fields(EntT)) |field| {
                 if(@hasField(Storage, field.name)) {
                     const ent_field = @field(ent, field.name);
-                    try @field(self.storage, field.name).append(self.allocator, ent_field);
+                    const comp_converted = ComponentRegistry.convertAnomToComponent(ent_field, field.name);
+                    try @field(self.storage, field.name).append(self.allocator, comp_converted);
                 }
             }
+            
             self.len += 1;
         }
 
         pub fn remove(self: *Self, ent_index: u32) u32 {
             const idx: usize = @intCast(ent_index);
 
+            const swaped_global_id: u32 = self.global_ids.swapRemove(idx);
             inline for(StorageFields) |field| {
-                const comp_list: *ArrayList() = &@field(self.storage, field.name);
-                
+                const comp_list = &@field(self.storage, field.name);
+                if(comp_list.items.len > 0) _ = comp_list.swapRemove(idx);
             }
+
+            return swaped_global_id;
         }
 
         pub fn getFields(self: *Self) EntTypeSlices {
@@ -70,7 +78,7 @@ fn getStorageType(comptime components: []const Component) type {
     var attrs: [components.len]std.builtin.Type.StructField.Attributes = undefined;
 
     for(components, 0..) |comp, i| {
-        const T = ComponentRegistry.GetTypeByField(comp);
+        const T = ComponentRegistry.getCompTypeByEnum(comp);
         names[i] = @tagName(comp);
         types[i] = ArrayList(T);
         attrs[i] = .{};

@@ -5,6 +5,8 @@ const PR = @import("PoolRegistry.zig").PoolRegistry;
 const PoolManager = @import("PoolManager.zig").PoolManager;
 const Component = CR.Enum;
 const Pool = PR.Enum;
+const EntPool = @import("EntPool.zig").EntPool;
+
 
 pub fn Query(comptime components: []const Component) type {
     const QueryReturnType = CR.GetTypeOfComponents(components, true);
@@ -17,7 +19,7 @@ pub fn Query(comptime components: []const Component) type {
         
         for(PR.Tags) |pool| {
             // check if ent pool mask bits are contain all bits of the query
-            const T = PR.getTypeByEnum(pool);
+            const T = EntPool(PR.getConfigByEnum(pool));
             var temp = T.pool_mask.intersectWith(q_mask);
             if(temp.eql(q_mask)) {
                 names[count] = @tagName(pool);
@@ -88,11 +90,11 @@ pub fn Query(comptime components: []const Component) type {
                 self.pending_mask_search = false;
             }
 
-            const arch = ent_pool.getArchetype(self.arch_masks[self.arch_idx]);
+            const arch_obj = ent_pool.getArchetype(self.arch_masks[self.arch_idx]);
             var return_arch: QueryReturnType = undefined;
             
             inline for(std.meta.fields(QueryReturnType)) |field| {
-                @field(return_arch, field.name) = @field(arch.storage, field.name).items;
+                @field(return_arch, field.name) = @field(arch_obj.arch.storage, field.name).items;
             }
             
             self.query_return = return_arch;

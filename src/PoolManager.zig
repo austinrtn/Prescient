@@ -25,7 +25,7 @@ pub const PoolManager = struct {
         }
     }
 
-    pub fn getPool(self: *Self, comptime pool: PoolEnum) *PR.getTypeByEnum(pool) {
+    pub fn getPool(self: *Self, comptime pool: PoolEnum) *EntPool(PR.getConfigByEnum(pool)) {
         return &@field(self.storage, @tagName(pool));
     }
 };

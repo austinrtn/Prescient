@@ -19,7 +19,7 @@ fn PoolRegistryT(comptime pool_configs: []const Config) type {
 
         const string_map = stringTypeMap(pool_configs);
 
-        pub fn getTypeByEnum(comptime pool: Enum) type {
+        pub fn getConfigByEnum(comptime pool: Enum) Config {
             return string_map.get(@tagName(pool)) orelse unreachable;
         }
     };
@@ -62,13 +62,13 @@ fn PoolTypes(comptime pool_configs: []const Config) type {
     );
 }
 
-fn stringTypeMap(comptime pool_configs: []const Config) std.StaticStringMap(type) {
-    const KV = struct{[]const u8, type};
+fn stringTypeMap(comptime pool_configs: []const Config) std.StaticStringMap(Config) {
+    const KV = struct{[]const u8, Config};
     var values: [pool_configs.len]KV = undefined;
 
     for(pool_configs, 0..) |config, i| {
-        values[i] = .{config.name, EntPool(config)};
+        values[i] = .{config.name, config};
     }
 
-    return std.StaticStringMap(type).initComptime(values);
+    return std.StaticStringMap(Config).initComptime(values);
 }
