@@ -1,6 +1,6 @@
 const std = @import("std");
 const ArrayList = std.ArrayList;
-const HashMap = std.AutoHashMap;
+const HashMap = std.AutoArrayHashMapUnmanaged;
 const ComponentRegistry = @import("ComponentRegistry.zig").ComponentRegistry;
 
 const getBitmask = CR.getBitmaskOfComponents;
@@ -21,26 +21,22 @@ pub fn EntPool(comptime config: Config) type {
         const Self = @This();
         pub const Archetype = ARCHETYPE;
         pub const tag = TAG;
-
         pub const pool_mask = getBitmask(pool_comps);
-        const HashmapType = struct{CR.BitSet, HashMapValue};
 
         allocator: std.mem.Allocator,
-        archetypes: HashMap(CR.BitSet, HashMapValue) = undefined,
+        archetypes: HashMap(CR.BitSet, HashMapValue) = .empty,
 
         pub fn init(allocator: std.mem.Allocator) Self {
-            var self: Self = .{ .allocator = allocator };
-            self.archetypes = .init(allocator);
+            const self: Self = .{ .allocator = allocator };
             return self;
         }
 
         pub fn deinit(self: *Self) void {
-            var values = self.archetypes.valueIterator();
-            while(values.next()) |val| {
+            for (self.archetypes.values()) |val| {
                 val.arch.deinit();
                 self.allocator.destroy(val.arch);
             }
-            self.archetypes.deinit();
+            self.archetypes.deinit(self.allocator);
         }
 
         pub fn append(self: *Self, ent: anytype, slot_id: u32) !AppendData {
@@ -60,13 +56,16 @@ pub fn EntPool(comptime config: Config) type {
             _ = arch.remove(0);
         }
 
+        pub fn getComponent(self: *Self, comptime component: Component, arch_idx: u32, ent_idx: u32) CR.getCompTypeByEnum(component) {
+            const arch = self.getArchetypeByIndex(arch_idx).arch;
+            return arch.getComponent(component, ent_idx);
+        }
+
         pub fn getArchetypesContainingBitset(self: Self, mask: CR.BitSet) ![]CR.BitSet {
             var matches: ArrayList(CR.BitSet) = .empty;
             defer matches.deinit(self.allocator);
 
-            var keys = self.archetypes.keyIterator();
-
-            while(keys.next()) |arch_mask| {
+            for (self.archetypes.keys()) |*arch_mask| {
                 var temp = arch_mask.intersectWith(mask);
                 if(temp.eql(mask)) try matches.append(self.allocator, arch_mask.*);
             }
@@ -78,14 +77,19 @@ pub fn EntPool(comptime config: Config) type {
             return self.archetypes.get(ent_mask) orelse unreachable;
         }
 
+        pub fn getArchetypeByIndex(self: *Self, arch_idx: u32) HashMapValue {
+            const idx: usize = @intCast(arch_idx);
+            return self.archetypes.values()[idx];
+        }
+
         fn getOrCreateArchetype(self: *Self, ent_mask: CR.BitSet) !HashMapValue {
             const archetype = self.archetypes.get(ent_mask);
             return archetype orelse blk: {
                 const arch_ptr = try self.allocator.create(Archetype);
                 arch_ptr.* = .init(self.allocator);
 
-                const map_val: HashMapValue = .{.arch_idx = self.archetypes.count(), .arch = arch_ptr};
-                try self.archetypes.put(ent_mask, map_val);
+                const map_val: HashMapValue = .{.arch_idx = @intCast(self.archetypes.count()), .arch = arch_ptr};
+                try self.archetypes.put(self.allocator, ent_mask, map_val);
                 break :blk self.archetypes.get(ent_mask) orelse unreachable;
             };
         }

@@ -1,9 +1,10 @@
 const std = @import("std");
 const Registry = @import("Registry.zig").Registry;
 const CR = @import("ComponentRegistry.zig").ComponentRegistry;
-const ComponentRegistry = CR.ComponentRegistry;
+const Component = CR.Enum;
 const PR = @import("PoolRegistry.zig").PoolRegistry;
 const PoolManager = @import("PoolManager.zig").PoolManager;
+const PoolInterface = @import("PoolInterface.zig").PoolInterface;
 const EntPool = @import("EntPool.zig").EntPool;
 const IdManager = @import("IdManager.zig").IdManager;
 
@@ -26,23 +27,19 @@ pub const Prescient = struct {
         self.id_manager.deinit();
     }
 
-    pub fn getPool(self: *Self, comptime pool: PR.Enum) *EntPool(PR.getConfigByEnum(pool)) {
-        return self.pool_manager.getPool(pool);
+    pub fn getPool(self: *Self, comptime pool: PR.Enum) PoolInterface(pool){
+        const ent_pool = self.pool_manager.getPool(pool);
+        return PoolInterface(pool).init(ent_pool, &self.id_manager);
     }
 
-    pub fn createEnt(self: *Self, comptime pool: PR.Enum, ent: anytype) !void {
-        const ent_pool = self.getPool(pool);
-
-        var slot = self.id_manager.getNextSlot();
-        const idx = try ent_pool.append(ent, slot.id);
-        slot.pool = @TypeOf(ent_pool.*).tag;
-        slot.arch_idx = idx.arch_idx;
-        slot.ent_idx = idx.ent_idx;
-
-        try self.id_manager.setSlot(slot);
-    }
-
-    pub fn getEnt(self: *Self, ent: anytype) @TypeOf(ent) {
-
+    pub fn getComponent(self: *Self, comptime component: Component, ent_id: u32) CR.getCompTypeByEnum(component) {
+        const slot = self.id_manager.getSlot(ent_id);
+        
+        switch(slot.pool) {
+            inline else => |p| {
+                var pool_interface = self.getPool(p);
+                return pool_interface.getComponent(component, ent_id);
+            }
+        }
     }
 };

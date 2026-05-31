@@ -22,6 +22,10 @@ fn PoolRegistryT(comptime pool_configs: []const Config) type {
         pub fn getConfigByEnum(comptime pool: Enum) Config {
             return string_map.get(@tagName(pool)) orelse unreachable;
         }
+
+        pub fn getEnumByName(comptime name: []const u8) Enum {
+            return std.meta.stringToEnum(Enum, name) orelse unreachable;
+        }
     };
 }
 

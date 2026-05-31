@@ -14,12 +14,28 @@ pub fn main(init: std.process.Init) !void {
     _ = init;
 }
 
+test "get component" {
+    const gpa = testing.allocator;
+    var prescient: Prescient = .init(gpa);
+    defer prescient.deinit();
+
+    var pool = prescient.getPool(.general);
+    const id = try pool.createEnt(.{.pos = .{.x = 1, .y = 1}, .vel = .{.xvel = 2, .yvel = 2}});
+
+    const pos = pool.getComponent(.pos, id);
+    try testing.expect(pos.x == 1);
+    try testing.expect(pos.y == 1);
+
+    const vel = prescient.getComponent(.vel, id);
+    try testing.expect(vel.xvel == 2);
+    try testing.expect(vel.yvel == 2);
+}
+
 test "pool" {
     const gpa = testing.allocator;
     var prescient: Prescient = .init(gpa);
     defer prescient.deinit();
 
-    const point_pool = prescient.getPool(.general);
     const Point = ComponentRegistry.GetTypeOfComponents(
         &.{.pos, .vel},
         false
@@ -30,15 +46,16 @@ test "pool" {
         false
     );
 
+    var point_pool = prescient.getPool(.general);
     const point: Point = .{.pos = .{.x = 1, .y = 1}, .vel = .{.xvel = 1, .yvel = 1}};
     const point2: Point = .{.pos = .{.x = -100, .y = -100}, .vel = .{.xvel = -2, .yvel = -2}};
     const point3: PointWithId = .{.pos = .{.x = 50, .y = 50}, .vel = .{.xvel = 6, .yvel = 7}, .id = 0};
 
-    _ = try point_pool.append(point, 0);
-    _ = try point_pool.append(point2, 0);
-    _ = try point_pool.append(point3, 0);
+    _ = try point_pool.createEnt(point);
+    _ = try point_pool.createEnt(point2);
+    _ = try point_pool.createEnt(point3);
 
-    try testing.expect(point_pool.archetypes.count() == 2);
+    try testing.expect(point_pool.ent_pool.archetypes.count() == 2);
 
     var query: Query(&.{.pos, .vel}) = try .init(gpa, &prescient.pool_manager);
     defer query.deinit();
@@ -55,7 +72,7 @@ test "pool" {
                 try testing.expectEqual(point.pos.x + point.vel.xvel, pos.x);
                 try testing.expectEqual(point.pos.y + point.vel.yvel, pos.y);
             } else if (start_x == point2.pos.x) {
-                try testing.expectEqual(point2.pos.x + point2.vel.xvel, pos.x);
+                try testing.expectEqual(point2.pos.x + point2.vel.xvel, pos.x); 
                 try testing.expectEqual(point2.pos.y + point2.vel.yvel, pos.y);
             } else if (start_x == point3.pos.x) {
                 try testing.expectEqual(point3.pos.x + point3.vel.xvel, pos.x);
@@ -68,17 +85,3 @@ test "pool" {
     try testing.expect(ent_count == 3);
 }
 
-test "id manager" {
-    const gpa = testing.allocator;
-    var prescient: Prescient = .init(gpa);
-    defer prescient.deinit();
-
-   try prescient.createEnt(.general, .{.pos = .{.x = 1, .y = 1}, .vel = .{.xvel = 1, .yvel = 1}});
-   try prescient.createEnt(.general, .{.pos = .{.x = 1, .y = 1}, .vel = .{.xvel = 1, .yvel = 1}});
-   try prescient.createEnt(.general, .{.pos = .{.x = 1, .y = 1}, });
-   try prescient.createEnt(.general, .{.pos = .{.x = 1, .y = 1}, });
-
-   for(prescient.id_manager.slots.items) |slot| {
-       std.debug.print("{any}\n", .{slot});
-   }
-}

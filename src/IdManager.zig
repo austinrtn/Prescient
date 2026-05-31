@@ -44,4 +44,9 @@ pub const IdManager = struct {
         if(slot.id < self.slots.items.len) self.slots.items[slot.id] = slot
         else try self.slots.append(self.allocator, slot);
     }
+
+    pub fn getSlot(self: *Self, id: u32) IdSlot {
+        std.debug.assert(std.mem.findScalar(u32, self.queue.items, id) == null);
+        return self.slots.items[id];
+    }
 };
