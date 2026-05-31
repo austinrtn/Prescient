@@ -33,8 +33,12 @@ pub const Prescient = struct {
     pub fn createEnt(self: *Self, comptime pool: PR.Enum, ent: anytype) !void {
         const ent_pool = self.getPool(pool);
 
-        const next_slot_id = self.id_manager.getNextSlotId();
-        const idx = try ent_pool.append(ent, next_slot_id);
+        const slot = self.id_manager.getNextSlot();
+        const idx = try ent_pool.append(ent, slot.id);
+        slot.pool = @TypeOf(ent_pool).tag;
+        slot.arch_idx = idx.arch_idx;
+        slot.ent_idx = idx.ent_idx;
+
         self.id_manager.setNextSlot(pool, idx.arch_idx, idx.ent_idx);
     }
 };

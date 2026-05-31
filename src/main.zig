@@ -18,13 +18,13 @@ test "pool" {
     const gpa = testing.allocator;
     var prescient: Prescient = .init(gpa);
     defer prescient.deinit();
-    
+
     const point_pool = prescient.getPool(.general);
     const Point = ComponentRegistry.GetTypeOfComponents(
         &.{.pos, .vel},
         false
     );
-    
+
     const PointWithId = ComponentRegistry.GetTypeOfComponents(
         &.{.pos, .vel, .id},
         false
@@ -37,14 +37,14 @@ test "pool" {
     _ = try point_pool.append(point);
     _ = try point_pool.append(point2);
     _ = try point_pool.append(point3);
-    
+
     try testing.expect(point_pool.archetypes.count() == 2);
 
     var query: Query(&.{.pos, .vel}) = try .init(gpa, &prescient.pool_manager);
     defer query.deinit();
 
     var ent_count: usize = 0;
-    
+
     while(try query.query()) |batch| {
         for(batch.pos, batch.vel) |*pos, vel| {
             const start_x = pos.x;
@@ -61,7 +61,7 @@ test "pool" {
                 try testing.expectEqual(point3.pos.x + point3.vel.xvel, pos.x);
                 try testing.expectEqual(point3.pos.y + point3.vel.yvel, pos.y);
             }
-            
+
             ent_count += 1;
         }
     }
@@ -74,4 +74,5 @@ test "id manager" {
     defer prescient.deinit();
 
    try prescient.createEnt(.general, .{.pos = .{.x = 1, .y = 1}, .vel = .{.xvel = 1, .yvel = 1}});
+   std.debug.print("{any}\n", .{prescient.id_manager.slots.items[0]});
 }

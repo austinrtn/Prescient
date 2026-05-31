@@ -28,25 +28,22 @@ pub const IdManager = struct {
         self.queue.deinit(self.allocator);
     }
 
-    pub fn getNextSlotId(self: *Self) u32 {
-        return self.queue.pop() orelse self.count;
+    pub fn getNextSlot(self: *Self) IdSlot {
+        if(self.queue.pop()) |idx| return self.slots.items[idx];
+
+        const id: u32 = @intCast(self.slots.items.len);
+        return .{
+            .id = id,
+            .pool = undefined,
+            .arch_idx = undefined,
+            .ent_idx = undefined,
+        };
     }
 
     pub fn setSlot(self: *Self, slot: IdSlot) !void {
-        if(slot.id < self.queue.items.len) {
-            const slots = &self.slots.items;
-            slots[slot.id] = slot;
-            return;
+        if(slot.id < self.slots.items.len) self.slots.items[slot.id] = slot
+        else {
+            try self.slots.append(self.allocator, slot);
         }
-
-        const slot_idx: u32 = @intCast(self.slots.items.len);
-        const new_slot: IdSlot = .{
-            .id = slot_idx,
-            .pool = pool,
-            .arch_idx = arch_idx,
-            .ent_idx = ent_idx,
-        };
-
-        try self.slots.append(self.allocator, new_slot);
     }
 };
