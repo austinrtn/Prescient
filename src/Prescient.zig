@@ -10,7 +10,7 @@ const IdManager = @import("IdManager.zig").IdManager;
 pub const Prescient = struct {
     pub const Self = @This();
     allocator: std.mem.Allocator,
-    
+
     id_manager: IdManager = undefined,
     pool_manager: PoolManager = undefined,
 
@@ -33,7 +33,8 @@ pub const Prescient = struct {
     pub fn createEnt(self: *Self, comptime pool: PR.Enum, ent: anytype) !void {
         const ent_pool = self.getPool(pool);
 
-        const idx = try ent_pool.append(ent);
-        _ = try self.id_manager.setNextSlot(pool, idx.arch_idx, idx.ent_idx);
+        const next_slot_id = self.id_manager.getNextSlotId();
+        const idx = try ent_pool.append(ent, next_slot_id);
+        self.id_manager.setNextSlot(pool, idx.arch_idx, idx.ent_idx);
     }
 };

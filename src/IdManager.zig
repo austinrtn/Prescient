@@ -13,8 +13,10 @@ pub const IdSlot = struct {
 pub const IdManager = struct {
     const Self = @This();
     allocator: std.mem.Allocator,
+
     slots: ArrayList(IdSlot) = .empty,
     queue: ArrayList(u32) = .empty,
+    count: u32 = 0,
 
     pub fn init(allocator: std.mem.Allocator) Self {
         const self: Self = .{ .allocator = allocator };
@@ -26,19 +28,15 @@ pub const IdManager = struct {
         self.queue.deinit(self.allocator);
     }
 
-    pub fn setNextSlot(self: *Self, pool: PR.Enum, arch_idx: u32, ent_idx: u32) !u32{
-        const next_queued_slot = self.queue.pop();
-        
-        if(next_queued_slot) |idx| {
-            const slot: *IdSlot = &self.slots.items[idx];
-            slot.* = IdSlot{
-                .id = slot.id,
-                .pool = pool,
-                .arch_idx = arch_idx,
-                .ent_idx = ent_idx,
-            };
-            
-            return idx;
+    pub fn getNextSlotId(self: *Self) u32 {
+        return self.queue.pop() orelse self.count;
+    }
+
+    pub fn setSlot(self: *Self, slot: IdSlot) !void {
+        if(slot.id < self.queue.items.len) {
+            const slots = &self.slots.items;
+            slots[slot.id] = slot;
+            return;
         }
 
         const slot_idx: u32 = @intCast(self.slots.items.len);
@@ -50,6 +48,5 @@ pub const IdManager = struct {
         };
 
         try self.slots.append(self.allocator, new_slot);
-        return new_slot.id; 
     }
 };
