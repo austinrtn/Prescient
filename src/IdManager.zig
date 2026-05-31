@@ -42,8 +42,6 @@ pub const IdManager = struct {
 
     pub fn setSlot(self: *Self, slot: IdSlot) !void {
         if(slot.id < self.slots.items.len) self.slots.items[slot.id] = slot
-        else {
-            try self.slots.append(self.allocator, slot);
-        }
+        else try self.slots.append(self.allocator, slot);
     }
 };

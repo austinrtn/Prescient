@@ -34,9 +34,9 @@ test "pool" {
     const point2: Point = .{.pos = .{.x = -100, .y = -100}, .vel = .{.xvel = -2, .yvel = -2}};
     const point3: PointWithId = .{.pos = .{.x = 50, .y = 50}, .vel = .{.xvel = 6, .yvel = 7}, .id = 0};
 
-    _ = try point_pool.append(point);
-    _ = try point_pool.append(point2);
-    _ = try point_pool.append(point3);
+    _ = try point_pool.append(point, 0);
+    _ = try point_pool.append(point2, 0);
+    _ = try point_pool.append(point3, 0);
 
     try testing.expect(point_pool.archetypes.count() == 2);
 
@@ -74,5 +74,11 @@ test "id manager" {
     defer prescient.deinit();
 
    try prescient.createEnt(.general, .{.pos = .{.x = 1, .y = 1}, .vel = .{.xvel = 1, .yvel = 1}});
-   std.debug.print("{any}\n", .{prescient.id_manager.slots.items[0]});
+   try prescient.createEnt(.general, .{.pos = .{.x = 1, .y = 1}, .vel = .{.xvel = 1, .yvel = 1}});
+   try prescient.createEnt(.general, .{.pos = .{.x = 1, .y = 1}, });
+   try prescient.createEnt(.general, .{.pos = .{.x = 1, .y = 1}, });
+
+   for(prescient.id_manager.slots.items) |slot| {
+       std.debug.print("{any}\n", .{slot});
+   }
 }

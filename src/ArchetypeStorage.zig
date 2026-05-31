@@ -34,10 +34,11 @@ pub fn Archetype(comptime components: []const Component) type {
             self.global_ids.deinit(self.allocator);
         }
 
-        pub fn append(self: *Self, ent: anytype, global_id: u32) !void {
+        pub fn append(self: *Self, ent: anytype, global_id: u32) !u32 {
             const EntT = @TypeOf(ent);
 
             try self.global_ids.append(self.allocator, global_id);
+
             inline for(std.meta.fields(EntT)) |field| {
                 if(@hasField(Storage, field.name)) {
                     const ent_field = @field(ent, field.name);
@@ -45,8 +46,9 @@ pub fn Archetype(comptime components: []const Component) type {
                     try @field(self.storage, field.name).append(self.allocator, comp_converted);
                 }
             }
-            
+
             self.len += 1;
+            return @intCast(self.len - 1);
         }
 
         pub fn remove(self: *Self, ent_index: u32) u32 {
