@@ -2,11 +2,11 @@ const std = @import("std");
 const ArrayList = std.ArrayList;
 const CR = @import("ComponentRegistry.zig").ComponentRegistry;
 const Component = CR.Enum;
+const ComponentStorage = @import("ComponentStorage.zig").ComponentStorage;
 
 pub fn Archetype(comptime components: []const Component) type {
-    const Storage = getStorageType(components);
+    const Storage = ComponentStorage(components);
     const StorageFields = std.meta.fields(Storage);
-    const CompStructFields = std.meta.fields(Storage);
     const EntTypeSlices = CR.GetTypeOfComponents(components, true);
     const bit_mask = CR.getBitmaskOfComponents(components);
 
@@ -17,19 +17,18 @@ pub fn Archetype(comptime components: []const Component) type {
         pub const mask = bit_mask;
         allocator: std.mem.Allocator,
         global_ids: ArrayList(u32) = .empty,
-        storage: Storage = undefined,
-        len: usize = 0,
+        comp_storage: Storage = undefined,
+        count: usize = 0,
 
         pub fn init(allocator: std.mem.Allocator) Self {
             var self: Self = .{.allocator = allocator};
-            inline for(CompStructFields) |field| @field(self.storage, field.name) = .empty;
-
+            inline for(StorageFields) |field| @field(self.comp_storage, field.name) = .empty;
             return self;
         }
 
         pub fn deinit(self: *Self) void {
-            inline for(CompStructFields) |field| {
-                @field(self.storage, field.name).deinit(self.allocator);
+            inline for(StorageFields) |field| {
+                @field(self.comp_storage, field.name).deinit(self.allocator);
             }
             self.global_ids.deinit(self.allocator);
         }
@@ -43,12 +42,12 @@ pub fn Archetype(comptime components: []const Component) type {
                 if(@hasField(Storage, field.name)) {
                     const ent_field = @field(ent, field.name);
                     const comp_converted = CR.convertAnomToComponent(ent_field, field.name);
-                    try @field(self.storage, field.name).append(self.allocator, comp_converted);
+                    try @field(self.comp_storage, field.name).append(self.allocator, comp_converted);
                 }
             }
 
-            self.len += 1;
-            return @intCast(self.len - 1);
+            self.count += 1;
+            return @intCast(self.count - 1);
         }
 
         pub fn remove(self: *Self, ent_index: u32) u32 {
@@ -56,45 +55,25 @@ pub fn Archetype(comptime components: []const Component) type {
 
             const swaped_global_id: u32 = self.global_ids.swapRemove(idx);
             inline for(StorageFields) |field| {
-                const comp_list = &@field(self.storage, field.name);
+                const comp_list = &@field(self.comp_storage, field.name);
                 if(comp_list.items.len > 0) _ = comp_list.swapRemove(idx);
             }
 
+            self.count -= 1;
             return swaped_global_id;
         }
 
         pub fn getComponent(self: *Self, comptime component: Component, ent_idx: u32) CR.getCompTypeByEnum(component) {
-            return @field(self.storage, @tagName(component)).items[ent_idx];
+            return @field(self.comp_storage, @tagName(component)).items[ent_idx];
         }
 
         pub fn getFields(self: *Self) EntTypeSlices {
             var slices: EntTypeSlices = undefined;
             inline for(std.meta.fields(EntTypeSlices)) |field| {
-                const list = &@field(self.storage, field.name);
+                const list = &@field(self.comp_storage, field.name);
                 @field(slices, field.name) = list.items;
             }
             return slices;
         }
     };
-}
-
-fn getStorageType(comptime components: []const Component) type {
-    var names: [components.len][]const u8 = undefined;
-    var types: [components.len]type = undefined;
-    var attrs: [components.len]std.builtin.Type.StructField.Attributes = undefined;
-
-    for(components, 0..) |comp, i| {
-        const T = CR.getCompTypeByEnum(comp);
-        names[i] = @tagName(comp);
-        types[i] = ArrayList(T);
-        attrs[i] = .{};
-    }
-
-    return @Struct(
-        .auto,
-        null,
-        &names,
-        &types,
-        &attrs,
-    );
 }

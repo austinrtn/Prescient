@@ -75,38 +75,37 @@ pub fn Query(comptime components: []const Component) type {
             }
             
             const pool_tag: Pool = std.meta.stringToEnum(PR.Enum, @tagName(PoolTags[self.pool_idx])) orelse unreachable;
-            const ent_pool = blk: {
-               switch(pool_tag) { 
-                   inline else => |tag| break :blk self.pool_manager.getPool(tag) 
-               }
-            };
-            
-            if(self.pending_mask_search) {
-                const matches = try ent_pool.getArchetypesContainingBitset(Mask);
-                defer self.allocator.free(matches);
-                
-                self.allocator.free(self.arch_masks);
-                self.arch_masks = try self.allocator.dupe(CR.BitSet, matches);
-                self.pending_mask_search = false;
+            switch(pool_tag) { 
+                inline else => |tag| {
+                    const ent_pool = self.pool_manager.getPool(tag);
+                    if(self.pending_mask_search) {
+                        const matches = try ent_pool.getArchetypesContainingBitset(Mask);
+                        defer self.allocator.free(matches);
+                        
+                        self.allocator.free(self.arch_masks);
+                        self.arch_masks = try self.allocator.dupe(CR.BitSet, matches);
+                        self.pending_mask_search = false;
+                    }
+        
+                    const arch_obj = ent_pool.getArchetype(self.arch_masks[self.arch_idx]);
+                    var return_arch: QueryReturnType = undefined;
+                    
+                    inline for(std.meta.fields(QueryReturnType)) |field| {
+                        @field(return_arch, field.name) = @field(arch_obj.arch.comp_storage, field.name).items;
+                    }
+                    
+                    self.query_return = return_arch;
+                    self.arch_idx += 1;
+                    
+                    if(self.arch_idx == self.arch_masks.len) {
+                        self.arch_idx = 0;
+                        self.pool_idx += 1;
+                        self.pending_mask_search = true;
+                    }
+                    
+                    return &self.query_return;
+                }
             }
-
-            const arch_obj = ent_pool.getArchetype(self.arch_masks[self.arch_idx]);
-            var return_arch: QueryReturnType = undefined;
-            
-            inline for(std.meta.fields(QueryReturnType)) |field| {
-                @field(return_arch, field.name) = @field(arch_obj.arch.storage, field.name).items;
-            }
-            
-            self.query_return = return_arch;
-            self.arch_idx += 1;
-            
-            if(self.arch_idx == self.arch_masks.len) {
-                self.arch_idx = 0;
-                self.pool_idx += 1;
-                self.pending_mask_search = true;
-            }
-            
-            return &self.query_return;
         }
 
         fn reset(self: *Self) void {

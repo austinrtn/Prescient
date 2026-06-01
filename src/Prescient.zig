@@ -5,7 +5,6 @@ const Component = CR.Enum;
 const PR = @import("PoolRegistry.zig").PoolRegistry;
 const PoolManager = @import("PoolManager.zig").PoolManager;
 const PoolInterface = @import("PoolInterface.zig").PoolInterface;
-const EntPool = @import("EntPool.zig").EntPool;
 const IdManager = @import("IdManager.zig").IdManager;
 
 pub const Prescient = struct {

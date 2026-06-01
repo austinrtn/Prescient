@@ -6,6 +6,7 @@ const CR = @import("ComponentRegistry.zig").ComponentRegistry;
 pub const Config = struct {
     name: []const u8,
     components: []const CR.Enum,
+    storage_strategy: enum{ archetype, sparse, },
 };
 
 pub const PoolRegistry = PoolRegistryT(&Pools);
