@@ -39,13 +39,23 @@ test "sparse pool" {
 test "append to pool" {
     var prescient: *Prescient = try .init(testing.allocator);
     defer prescient.deinit();
+    
+    var archetype_pool = prescient.getPool(.archetype);
+    const ent1 = try archetype_pool.createEnt(.{.pos = .{.x = 1, .y = 1}, .vel = .{.xvel = 2, .yvel = 2}});
 
-    var pool = prescient.getPool(.general);
-    const ent1 = try pool.createEnt(.{.pos = .{.x = 1, .y = 1}, .vel = .{.xvel = 2, .yvel = 2}});
-    _ = ent1;
+    const pos = archetype_pool.getComponent(.pos, ent1);
+    const vel = archetype_pool.getComponent(.vel, ent1);
+    try testing.expect(pos.x == 1 and pos.y == 1);
+    try testing.expect(vel.xvel == 2 and vel.yvel == 2);
 
-    _ = try prescient.ent.create(.general, .{.pos = .{.x = 1, .y = 1}, .vel = .{.xvel = 2, .yvel = 2}});
-
+    const ent2 = try prescient.ent.create(.archetype, .{.pos = .{.x = -1, .y = -1}, .vel = .{.xvel = -2, .yvel = -2}});
+    
+    const pos2 = prescient.ent.getComponent(.pos, ent2);
+    const vel2 = prescient.ent.getComponent(.vel, ent2);
+    try testing.expect(pos2.x == -1 and pos2.y == -1);
+    try testing.expect(vel2.xvel == -2 and vel2.yvel == -2);
+    
+    try testing.expect(archetype_pool.ent_pool.archetypes.count() == 1);
 }
 
 test "get component" {

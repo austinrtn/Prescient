@@ -75,6 +75,10 @@ pub fn SparsePool(comptime config: PR.Config) type {
             return comp;
         }
 
+        pub fn addComponent(self: *Self, comptime component: Component, arch_idx: u32, ent_idx: u32) !void {
+            
+        }
+
         pub fn getOrCreateArchetype(self: *Self, ent_mask: CR.BitSet) !HashMapValue {
             const result = try self.archetypes.getOrPut(self.allocator, ent_mask);
             if(!result.found_existing) {
