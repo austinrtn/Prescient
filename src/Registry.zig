@@ -1,4 +1,4 @@
-const PoolConfig = @import("PoolRegistry.zig").Config;
+const PoolConfig = @import("PoolRegistry.zig").PoolConfig;
 const CR = @import("ComponentRegistry.zig");
 const ComponentDesc = CR.ComponentDesc;
 

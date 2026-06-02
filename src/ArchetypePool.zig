@@ -7,7 +7,7 @@ const Component = CR.Enum;
 const getBitmask = CR.getBitmaskOfComponents;
 
 const ArchetypeStorageT = @import("ArchetypeStorage.zig").Archetype;
-const Config = @import("PoolRegistry.zig").Config;
+const Config = @import("PoolRegistry.zig").PoolConfig;
 
 pub fn ArchetypePool(comptime config: Config) type {
     const pool_comps = config.components;

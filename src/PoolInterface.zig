@@ -4,9 +4,9 @@ const EntPoolType = @import("EntPool.zig").EntPool;
 const PR = @import("PoolRegistry.zig").PoolRegistry;
 const IdManager = @import("IdManager.zig").IdManager;
 
-pub fn PoolInterface(pool: PR.Enum) type {
-    const pool_config = PR.getConfigByEnum(pool);
+pub fn PoolInterface(comptime pool_config: PR.Config) type {
     const EntPool = EntPoolType(pool_config);
+    
     return struct {
         const Self = @This();
         const PoolTag = PR.getEnumByName(pool_config.name);

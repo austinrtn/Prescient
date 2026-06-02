@@ -3,7 +3,7 @@ const Pools = @import("Registry.zig").Registry.PoolConfigs;
 const EntPool = @import("EntPool.zig").EntPool;
 const CR = @import("ComponentRegistry.zig").ComponentRegistry;
 
-pub const Config = struct {
+pub const PoolConfig = struct {
     name: []const u8,
     components: []const CR.Enum,
     storage_strategy: enum{ archetype, sparse, },
@@ -11,16 +11,16 @@ pub const Config = struct {
 
 pub const PoolRegistry = PoolRegistryT(&Pools);
 
-fn PoolRegistryT(comptime pool_configs: []const Config) type {
+fn PoolRegistryT(comptime pool_configs: []const PoolConfig) type {
     return struct {
         pub const Enum = PoolEnumT(pool_configs);
         pub const Tags = std.meta.tags(Enum);
         pub const Types = PoolTypes(pool_configs);
-        pub const Conifg = Config;
+        pub const Config = PoolConfig;
 
         const string_map = stringTypeMap(pool_configs);
 
-        pub fn getConfigByEnum(comptime pool: Enum) Config {
+        pub fn getConfigByEnum(comptime pool: Enum) PoolConfig {
             return string_map.get(@tagName(pool)) orelse unreachable;
         }
 
@@ -30,7 +30,7 @@ fn PoolRegistryT(comptime pool_configs: []const Config) type {
     };
 }
 
-fn PoolEnumT(comptime pool_configs: []const Config) type {
+fn PoolEnumT(comptime pool_configs: []const PoolConfig) type {
     var names: [pool_configs.len][]const u8 = undefined;
     var vals:[pool_configs.len]u8 = undefined;
 
@@ -47,7 +47,7 @@ fn PoolEnumT(comptime pool_configs: []const Config) type {
     );
 }
 
-fn PoolTypes(comptime pool_configs: []const Config) type {
+fn PoolTypes(comptime pool_configs: []const PoolConfig) type {
     var names: [pool_configs.len][]const u8 = undefined;
     var types: [pool_configs.len]type = undefined;
     var attrs: [pool_configs.len]std.builtin.Type.StructField.Attributes = undefined;
@@ -67,13 +67,13 @@ fn PoolTypes(comptime pool_configs: []const Config) type {
     );
 }
 
-fn stringTypeMap(comptime pool_configs: []const Config) std.StaticStringMap(Config) {
-    const KV = struct{[]const u8, Config};
+fn stringTypeMap(comptime pool_configs: []const PoolConfig) std.StaticStringMap(PoolConfig) {
+    const KV = struct{[]const u8, PoolConfig};
     var values: [pool_configs.len]KV = undefined;
 
     for(pool_configs, 0..) |config, i| {
         values[i] = .{config.name, config};
     }
 
-    return std.StaticStringMap(Config).initComptime(values);
+    return std.StaticStringMap(PoolConfig).initComptime(values);
 }
