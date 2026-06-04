@@ -45,6 +45,16 @@ pub fn ComponentRegistryT(comptime comp_descs: []const ComponentDesc) type {
             return getBitmaskOfComponents(&comps);
         }
 
+        pub fn addComponentBit(comptime component: Enum, bitset: BitSet) BitSet {
+            var new_bitset = bitset;
+            new_bitset.set(getBitByEnum(component));
+            return new_bitset;
+        }
+
+        pub fn getBitByEnum(comptime component: Enum) usize {
+            return @intFromEnum(component);
+        }
+
         pub fn convertAnomToComponent(anom: anytype, comptime comp_name: []const u8) GetCompTypeByName(comp_name) {
             const AnomType = @TypeOf(anom);
             const CompType = GetCompTypeByName(comp_name); 

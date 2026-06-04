@@ -10,11 +10,11 @@ pub const Registry = struct {
     };
 
     pub const PoolConfigs = [_]PoolConfig{
-        .{
-            .name = "general", 
-            .components = &.{.pos, .vel, .id},
-            .storage_strategy = .archetype,
-        },
+        // .{
+        //     .name = "archetype", 
+        //     .components = &.{.pos, .vel, .id},
+        //     .storage_strategy = .archetype,
+        // },
         .{
             .name = "sparse", 
             .components = &.{.pos, .vel, .id},

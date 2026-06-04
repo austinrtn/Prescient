@@ -37,5 +37,26 @@ pub fn PoolInterface(comptime pool_config: PR.Config) type {
             const slot = self.id_manager.getSlot(ent_id);
             return self.ent_pool.getComponent(component, slot.arch_idx, slot.ent_idx);
         }
+
+        pub fn addComponent(
+            self: *Self, 
+            comptime component: Component, 
+            comp_data: anytype, 
+            ent_id: u32
+        ) !void {
+            var slot = self.id_manager.getSlot(ent_id);
+            const converted_comp_data = CR.convertAnomToComponent(comp_data, @tagName(component));
+            const res = try self.ent_pool.addComponent(component, converted_comp_data, slot.arch_idx, slot.ent_idx);
+
+            slot.arch_idx = res.new_arch_idx;
+            slot.ent_idx = res.new_ent_idx;
+
+            if(res.swapped_ent_id) |id| {
+                var swapped_slot = self.id_manager.getSlot(id);
+                swapped_slot.ent_idx = res.swapped_ent_idx.?;
+            }
+            
+            try self.id_manager.setSlot(slot);
+        }
     };
 }
