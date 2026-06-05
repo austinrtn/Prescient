@@ -6,7 +6,7 @@ const CR = @import("ComponentRegistry.zig").ComponentRegistry;
 pub const PoolConfig = struct {
     name: []const u8,
     components: []const CR.Enum,
-    storage_strategy: enum{ archetype, sparse, },
+    storage_strategy: enum { archetype, sparse_set },
 };
 
 pub const PoolRegistry = PoolRegistryT(&Pools);
@@ -32,9 +32,9 @@ fn PoolRegistryT(comptime pool_configs: []const PoolConfig) type {
 
 fn PoolEnumT(comptime pool_configs: []const PoolConfig) type {
     var names: [pool_configs.len][]const u8 = undefined;
-    var vals:[pool_configs.len]u8 = undefined;
+    var vals: [pool_configs.len]u8 = undefined;
 
-    for(pool_configs, 0..) |desc, i| {
+    for (pool_configs, 0..) |desc, i| {
         names[i] = desc.name;
         vals[i] = @intCast(i);
     }
@@ -52,7 +52,7 @@ fn PoolTypes(comptime pool_configs: []const PoolConfig) type {
     var types: [pool_configs.len]type = undefined;
     var attrs: [pool_configs.len]std.builtin.Type.StructField.Attributes = undefined;
 
-    for(pool_configs, 0..) |config, i| {
+    for (pool_configs, 0..) |config, i| {
         names[i] = config.name;
         types[i] = EntPool(config);
         attrs[i] = .{};
@@ -68,11 +68,11 @@ fn PoolTypes(comptime pool_configs: []const PoolConfig) type {
 }
 
 fn stringTypeMap(comptime pool_configs: []const PoolConfig) std.StaticStringMap(PoolConfig) {
-    const KV = struct{[]const u8, PoolConfig};
+    const KV = struct { []const u8, PoolConfig };
     var values: [pool_configs.len]KV = undefined;
 
-    for(pool_configs, 0..) |config, i| {
-        values[i] = .{config.name, config};
+    for (pool_configs, 0..) |config, i| {
+        values[i] = .{ config.name, config };
     }
 
     return std.StaticStringMap(PoolConfig).initComptime(values);

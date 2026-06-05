@@ -3,22 +3,47 @@ const CR = @import("ComponentRegistry.zig");
 const ComponentDesc = CR.ComponentDesc;
 
 pub const Registry = struct {
-    pub const comp_descs = [_]ComponentDesc {
-        .{.name = "pos", .T = struct{x: f32, y: f32}},
-        .{.name = "vel", .T = struct{xvel: f32, yvel: f32}},
-        .{.name = "id", .T = u32},
+    pub const comp_descs = [_]ComponentDesc{
+        .{ .name = "pos", .T = struct { x: f32, y: f32 } },
+        .{ .name = "vel", .T = struct { xvel: f32, yvel: f32 } },
+        .{ .name = "id", .T = u32 },
     };
 
     pub const PoolConfigs = [_]PoolConfig{
-        // .{
-        //     .name = "archetype", 
-        //     .components = &.{.pos, .vel, .id},
-        //     .storage_strategy = .archetype,
-        // },
         .{
-            .name = "sparse", 
-            .components = &.{.pos, .vel, .id},
-            .storage_strategy = .sparse,
+            .name = "archetype",
+            .components = &.{ .pos, .vel, .id },
+            .storage_strategy = .archetype,
+        },
+        .{
+            .name = "sparse_set",
+            .components = &.{ .pos, .vel, .id },
+            .storage_strategy = .sparse_set,
         },
     };
+
+    pub const EntityId = TypedIndex(u32, "EntityId");
+    pub const GroupIndex = TypedIndex(u32, "GroupIndex");
+    pub const MemberIndex = TypedIndex(u32, "MemberIndex");
+    pub const RecordIndex = TypedIndex(u32, "RecordIndex");
+    pub const ComponentIndex = TypedIndex(u32, "ComponentIndex");
+
+    pub fn TypedIndex(comptime T: type, comptime name: []const u8) type {
+        return struct {
+            pub const type_name = name;
+            val: T,
+
+            pub fn init(val: T) @This() {
+                return .{ .val = val };
+            }
+
+            pub fn idx(self: @This()) usize {
+                return @intCast(self.val);
+            }
+
+            pub fn eql(self: @This(), other_val: @This()) bool {
+                return self.val == other_val.val;
+            }
+        };
+    }
 };

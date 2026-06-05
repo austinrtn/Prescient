@@ -1,0 +1,98 @@
+<mxfile host="app.diagrams.net" modified="2026-06-05T00:00:00.000Z" agent="Codex" version="26.0.0">
+  <diagram id="storage-access-flow" name="Storage Access Flow">
+    <mxGraphModel dx="1434" dy="874" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="Prescient Storage Access Flow" style="text;html=1;strokeColor=none;fillColor=none;fontSize=28;fontStyle=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+          <mxGeometry x="480" y="30" width="640" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="api" value="Public API&#xa;prescient.ent.getComponent(component, entity_id)&#xa;prescient.addComponent(component, value, entity_id)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="570" y="110" width="460" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="slot" value="IdManager.getSlot(entity_id)&#xa;slot = { entity_id, pool_id, group_index, member_index }" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="570" y="230" width="460" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="dispatch" value="Dispatch by slot.pool_id&#xa;PoolManager.getPool(pool_id)&#xa;PoolInterface calls concrete pool" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="650" y="340" width="300" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="arch-header" value="Archetype Strategy" style="swimlane;html=1;startSize=34;fillColor=#f8cecc;strokeColor=#b85450;fontSize=16;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="80" y="520" width="640" height="410" as="geometry" />
+        </mxCell>
+        <mxCell id="arch-group" value="groups.values()[slot.group_index]&#xa;returns true archetype storage group" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=14;" vertex="1" parent="arch-header">
+          <mxGeometry x="70" y="70" width="500" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="arch-member" value="slot.member_index is the component row&#xa;inside every array in that archetype" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=14;" vertex="1" parent="arch-header">
+          <mxGeometry x="70" y="170" width="500" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="arch-data" value="group.comp_storage.&lt;component&gt;.items[member_index]&#xa;direct contiguous component access" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=14;" vertex="1" parent="arch-header">
+          <mxGeometry x="70" y="270" width="500" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="sparse-header" value="Sparse Strategy With Pseudo-Groups" style="swimlane;html=1;startSize=34;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=16;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="880" y="520" width="640" height="410" as="geometry" />
+        </mxCell>
+        <mxCell id="sparse-group" value="groups.values()[slot.group_index]&#xa;returns pseudo-group for current component mask" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=14;" vertex="1" parent="sparse-header">
+          <mxGeometry x="70" y="55" width="500" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="sparse-record-index" value="record_idx = group.items[slot.member_index]&#xa;member list stores entity record indexes" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=14;" vertex="1" parent="sparse-header">
+          <mxGeometry x="70" y="145" width="500" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="sparse-record" value="entity_record = entity_records.items[record_idx]&#xa;record contains entity_id and per-component comp_idx values" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=14;" vertex="1" parent="sparse-header">
+          <mxGeometry x="70" y="235" width="500" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="sparse-data" value="comp_idx = entity_record.&lt;component&gt;.?&#xa;comp_storage.&lt;component&gt;.items[comp_idx].value" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=14;" vertex="1" parent="sparse-header">
+          <mxGeometry x="70" y="325" width="500" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="query-header" value="Query Access Difference" style="swimlane;html=1;startSize=34;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=16;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="80" y="960" width="1440" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="query-common" value="Query mask selects matching groups by BitSet containment" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=14;" vertex="1" parent="query-header">
+          <mxGeometry x="50" y="50" width="360" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="query-arch" value="Archetype query: return component slices directly from group.comp_storage" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=14;" vertex="1" parent="query-header">
+          <mxGeometry x="535" y="50" width="360" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="query-sparse" value="Sparse query: iterate group members, resolve record_idx to comp_idx, then collect refs/values" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=14;" vertex="1" parent="query-header">
+          <mxGeometry x="1015" y="50" width="380" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="e-api-slot" value="" style="endArrow=block;html=1;rounded=0;strokeWidth=2;" edge="1" parent="1" source="api" target="slot">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-slot-dispatch" value="" style="endArrow=block;html=1;rounded=0;strokeWidth=2;" edge="1" parent="1" source="slot" target="dispatch">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-dispatch-arch" value="pool_id = archetype" style="endArrow=block;html=1;rounded=0;strokeWidth=2;" edge="1" parent="1" source="dispatch" target="arch-group">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="400" y="500" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-dispatch-sparse" value="pool_id = sparse" style="endArrow=block;html=1;rounded=0;strokeWidth=2;" edge="1" parent="1" source="dispatch" target="sparse-group">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1200" y="500" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-arch-1" value="" style="endArrow=block;html=1;rounded=0;" edge="1" parent="arch-header" source="arch-group" target="arch-member">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-arch-2" value="" style="endArrow=block;html=1;rounded=0;" edge="1" parent="arch-header" source="arch-member" target="arch-data">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-sparse-1" value="" style="endArrow=block;html=1;rounded=0;" edge="1" parent="sparse-header" source="sparse-group" target="sparse-record-index">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-sparse-2" value="" style="endArrow=block;html=1;rounded=0;" edge="1" parent="sparse-header" source="sparse-record-index" target="sparse-record">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-sparse-3" value="" style="endArrow=block;html=1;rounded=0;" edge="1" parent="sparse-header" source="sparse-record" target="sparse-data">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-query-1" value="" style="endArrow=block;html=1;rounded=0;" edge="1" parent="query-header" source="query-common" target="query-arch">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-query-2" value="" style="endArrow=block;html=1;rounded=0;" edge="1" parent="query-header" source="query-common" target="query-sparse">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

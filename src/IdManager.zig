@@ -2,12 +2,13 @@ const std = @import("std");
 const ArrayList = std.ArrayList;
 const CR = @import("ComponentRegistry.zig").ComponentRegistry;
 const PR = @import("PoolRegistry.zig").PoolRegistry;
+const Registry = @import("Registry.zig").Registry;
 
 pub const IdSlot = struct {
-    id: u32,
-    pool: PR.Enum,
-    arch_idx: u32,
-    ent_idx: u32,
+    entity_id: Registry.EntityId,
+    pool_id: PR.Enum,
+    group_index: Registry.GroupIndex,
+    member_index: Registry.MemberIndex,
 };
 
 pub const IdManager = struct {
@@ -15,7 +16,7 @@ pub const IdManager = struct {
     allocator: std.mem.Allocator,
 
     slots: ArrayList(IdSlot) = .empty,
-    queue: ArrayList(u32) = .empty,
+    queue: ArrayList(Registry.EntityId) = .empty,
     count: u32 = 0,
 
     pub fn init(allocator: std.mem.Allocator) Self {
@@ -29,24 +30,25 @@ pub const IdManager = struct {
     }
 
     pub fn getNextSlot(self: *Self) IdSlot {
-        if(self.queue.pop()) |idx| return self.slots.items[idx];
+        if (self.queue.pop()) |entity_id| return self.slots.items[entity_id.idx()];
 
-        const id: u32 = @intCast(self.slots.items.len);
+        const entity_id: Registry.EntityId = .init(@intCast(self.slots.items.len));
         return .{
-            .id = id,
-            .pool = undefined,
-            .arch_idx = undefined,
-            .ent_idx = undefined,
+            .entity_id = entity_id,
+            .pool_id = undefined,
+            .group_index = undefined,
+            .member_index = undefined,
         };
     }
 
     pub fn setSlot(self: *Self, slot: IdSlot) !void {
-        if(slot.id < self.slots.items.len) self.slots.items[slot.id] = slot
-        else try self.slots.append(self.allocator, slot);
+        if (slot.entity_id.idx() < self.slots.items.len) self.slots.items[slot.entity_id.idx()] = slot else try self.slots.append(self.allocator, slot);
     }
 
-    pub fn getSlot(self: *Self, id: u32) IdSlot {
-        std.debug.assert(std.mem.findScalar(u32, self.queue.items, id) == null);
-        return self.slots.items[id];
+    pub fn getSlot(self: *Self, entity_id: Registry.EntityId) IdSlot {
+        for (self.queue.items) |queued_entity_id| {
+            std.debug.assert(!queued_entity_id.eql(entity_id));
+        }
+        return self.slots.items[entity_id.idx()];
     }
 };

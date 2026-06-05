@@ -3,6 +3,7 @@ const ArrayList = std.ArrayList;
 const CR = @import("ComponentRegistry.zig").ComponentRegistry;
 const Component = CR.Enum;
 const ComponentStorage = @import("ComponentStorage.zig").ComponentStorage;
+const Registry = @import("Registry.zig").Registry;
 
 pub fn Archetype(comptime components: []const Component) type {
     const Storage = ComponentStorage(components);
@@ -16,30 +17,30 @@ pub fn Archetype(comptime components: []const Component) type {
         pub const Components = components;
         pub const mask = bit_mask;
         allocator: std.mem.Allocator,
-        global_ids: ArrayList(u32) = .empty,
+        entity_ids: ArrayList(Registry.EntityId) = .empty,
         comp_storage: Storage = undefined,
         count: usize = 0,
 
         pub fn init(allocator: std.mem.Allocator) Self {
-            var self: Self = .{.allocator = allocator};
-            inline for(StorageFields) |field| @field(self.comp_storage, field.name) = .empty;
+            var self: Self = .{ .allocator = allocator };
+            inline for (StorageFields) |field| @field(self.comp_storage, field.name) = .empty;
             return self;
         }
 
         pub fn deinit(self: *Self) void {
-            inline for(StorageFields) |field| {
+            inline for (StorageFields) |field| {
                 @field(self.comp_storage, field.name).deinit(self.allocator);
             }
-            self.global_ids.deinit(self.allocator);
+            self.entity_ids.deinit(self.allocator);
         }
 
-        pub fn append(self: *Self, ent: anytype, global_id: u32) !u32 {
+        pub fn append(self: *Self, ent: anytype, entity_id: Registry.EntityId) !Registry.MemberIndex {
             const EntT = @TypeOf(ent);
 
-            try self.global_ids.append(self.allocator, global_id);
+            try self.entity_ids.append(self.allocator, entity_id);
 
-            inline for(std.meta.fields(EntT)) |field| {
-                if(@hasField(Storage, field.name)) {
+            inline for (std.meta.fields(EntT)) |field| {
+                if (@hasField(Storage, field.name)) {
                     const ent_field = @field(ent, field.name);
                     const comp_converted = CR.convertAnomToComponent(ent_field, field.name);
                     try @field(self.comp_storage, field.name).append(self.allocator, comp_converted);
@@ -47,29 +48,28 @@ pub fn Archetype(comptime components: []const Component) type {
             }
 
             self.count += 1;
-            return @intCast(self.count - 1);
+            return .init(@intCast(self.count - 1));
         }
 
-        pub fn remove(self: *Self, ent_index: u32) u32 {
-            const idx: usize = @intCast(ent_index);
+        pub fn remove(self: *Self, member_index: Registry.MemberIndex) void {
+            const member_idx = member_index.idx();
 
-            const swaped_global_id: u32 = self.global_ids.swapRemove(idx);
-            inline for(StorageFields) |field| {
+            _ = self.entity_ids.swapRemove(member_idx);
+            inline for (StorageFields) |field| {
                 const comp_list = &@field(self.comp_storage, field.name);
-                if(comp_list.items.len > 0) _ = comp_list.swapRemove(idx);
+                if (comp_list.items.len > 0) _ = comp_list.swapRemove(member_idx);
             }
 
             self.count -= 1;
-            return swaped_global_id;
         }
 
-        pub fn getComponent(self: *Self, comptime component: Component, ent_idx: u32) CR.getCompTypeByEnum(component) {
-            return @field(self.comp_storage, @tagName(component)).items[ent_idx];
+        pub fn getComponent(self: *Self, comptime component: Component, member_index: Registry.MemberIndex) CR.getCompTypeByEnum(component) {
+            return @field(self.comp_storage, @tagName(component)).items[member_index.idx()];
         }
 
         pub fn getFields(self: *Self) EntTypeSlices {
             var slices: EntTypeSlices = undefined;
-            inline for(std.meta.fields(EntTypeSlices)) |field| {
+            inline for (std.meta.fields(EntTypeSlices)) |field| {
                 const list = &@field(self.comp_storage, field.name);
                 @field(slices, field.name) = list.items;
             }

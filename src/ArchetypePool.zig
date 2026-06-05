@@ -8,13 +8,14 @@ const getBitmask = CR.getBitmaskOfComponents;
 
 const ArchetypeStorageT = @import("ArchetypeStorage.zig").Archetype;
 const Config = @import("PoolRegistry.zig").PoolConfig;
+const Registry = @import("Registry.zig").Registry;
 
 pub fn ArchetypePool(comptime config: Config) type {
     const pool_comps = config.components;
     const ARCHETYPE = ArchetypeStorageT(pool_comps);
     const TAG = std.meta.stringToEnum(PR.Enum, config.name) orelse unreachable;
-    const HashMapValue = struct{arch_idx: u32, arch: *ARCHETYPE};
-    const AppendData = struct{arch_idx: u32, ent_idx: u32};
+    const HashMapValue = struct { group_index: Registry.GroupIndex, group: *ARCHETYPE };
+    const AppendData = struct { group_index: Registry.GroupIndex, member_index: Registry.MemberIndex };
 
     return struct {
         const Self = @This();
@@ -23,7 +24,7 @@ pub fn ArchetypePool(comptime config: Config) type {
         pub const pool_mask = getBitmask(pool_comps);
 
         allocator: std.mem.Allocator,
-        archetypes: HashMap(CR.BitSet, HashMapValue) = .empty,
+        groups: HashMap(CR.BitSet, HashMapValue) = .empty,
 
         pub fn init(allocator: std.mem.Allocator) Self {
             const self: Self = .{ .allocator = allocator };
@@ -31,65 +32,84 @@ pub fn ArchetypePool(comptime config: Config) type {
         }
 
         pub fn deinit(self: *Self) void {
-            for (self.archetypes.values()) |val| {
-                val.arch.deinit();
-                self.allocator.destroy(val.arch);
+            for (self.groups.values()) |val| {
+                val.group.deinit();
+                self.allocator.destroy(val.group);
             }
-            self.archetypes.deinit(self.allocator);
+            self.groups.deinit(self.allocator);
         }
 
-        pub fn addEnt(self: *Self, ent: anytype, slot_id: u32) !AppendData {
+        pub fn addEnt(self: *Self, ent: anytype, entity_id: Registry.EntityId) !AppendData {
             const ent_mask = comptime CR.getBitmaskFromEnt(@TypeOf(ent));
             const val = try self.getOrCreateArchetype(ent_mask);
-            const arch = val.arch;
+            const group = val.group;
 
-            const ent_idx = try arch.append(ent, slot_id);
-            return .{.arch_idx = val.arch_idx, .ent_idx = ent_idx};
+            const member_idx = try group.append(ent, entity_id);
+            return .{ .group_index = val.group_index, .member_index = member_idx };
         }
 
-        pub fn remove(self: *Self, ent: anytype) void  {
-            const ent_mask = comptime CR.getBitmaskFromEnt(@TypeOf(ent));
-            const val = self.getArchetype(ent_mask);
-            const arch = val.arch;
-
-            _ = arch.remove(0);
+        pub fn remove(self: *Self, group_index: Registry.GroupIndex, member_index: Registry.MemberIndex) void {
+            const group = self.groups.values()[group_index.idx()].group;
+            group.remove(member_index);
         }
 
-        pub fn getComponent(self: *Self, comptime component: Component, arch_idx: u32, ent_idx: u32) CR.getCompTypeByEnum(component) {
-            const arch = self.getArchetypeByIndex(arch_idx).arch;
-            return arch.getComponent(component, ent_idx);
+        pub fn getComponent(self: *Self, comptime component: Component, group_index: Registry.GroupIndex, member_index: Registry.MemberIndex) CR.getCompTypeByEnum(component) {
+            const group = self.getGroupByIndex(group_index).group;
+            return group.getComponent(component, member_index);
+        }
+        
+        const AddComponentReturnType = struct {
+            new_group_index: Registry.GroupIndex,
+            new_member_index: Registry.MemberIndex,
+            swapped_entity_id: ?Registry.EntityId,
+            swapped_member_index: ?Registry.MemberIndex,
+        };
+        
+        pub fn addComponent(self: *Self, comptime component: Component, comp_value: CR.getCompTypeByEnum(component), 
+            group_index: Registry.GroupIndex, member_index: Registry.MemberIndex,) !AddComponentReturnType {
+                const old_mask = self.groups.keys()[group_index];
+                const group = self.getGroupByIndex(group_index).group;
+                // will probalby need remove to return memeber idx
+                group.remove(member_index);
+
+                const new_mask = CR.addComponentBit(component, old_mask);
+                const new_group = try self.getOrCreateArchetype(new_mask);
+
+                // When appending ent component data in archetype pool, I will probably need to have a function that 
+                // returns a struct of all pool components, and will return fields either with data or null based on mask bitset value
+                try new_group.group.append(ent: anytype, entity_id: TypedIndex(u32))
+
         }
 
         pub fn getArchetypesContainingBitset(self: Self, mask: CR.BitSet) ![]CR.BitSet {
             var matches: ArrayList(CR.BitSet) = .empty;
             defer matches.deinit(self.allocator);
 
-            for (self.archetypes.keys()) |*arch_mask| {
+            for (self.groups.keys()) |*arch_mask| {
                 var temp = arch_mask.intersectWith(mask);
-                if(temp.eql(mask)) try matches.append(self.allocator, arch_mask.*);
+                if (temp.eql(mask)) try matches.append(self.allocator, arch_mask.*);
             }
 
             return matches.toOwnedSlice(self.allocator);
         }
 
         pub fn getArchetype(self: *Self, ent_mask: CR.BitSet) HashMapValue {
-            return self.archetypes.get(ent_mask) orelse unreachable;
+            return self.groups.get(ent_mask) orelse unreachable;
         }
 
-        pub fn getArchetypeByIndex(self: *Self, arch_idx: u32) HashMapValue {
-            const idx: usize = @intCast(arch_idx);
-            return self.archetypes.values()[idx];
+        pub fn getGroupByIndex(self: *Self, group_index: Registry.GroupIndex) HashMapValue {
+            return self.groups.values()[group_index.idx()];
         }
 
         fn getOrCreateArchetype(self: *Self, ent_mask: CR.BitSet) !HashMapValue {
-            const archetype = self.archetypes.get(ent_mask);
+            const archetype = self.groups.get(ent_mask);
             return archetype orelse blk: {
                 const arch_ptr = try self.allocator.create(Archetype);
                 arch_ptr.* = .init(self.allocator);
 
-                const map_val: HashMapValue = .{.arch_idx = @intCast(self.archetypes.count()), .arch = arch_ptr};
-                try self.archetypes.put(self.allocator, ent_mask, map_val);
-                break :blk self.archetypes.get(ent_mask) orelse unreachable;
+                const map_val: HashMapValue = .{ .group_index = .init(@intCast(self.groups.count())), .group = arch_ptr };
+                try self.groups.put(self.allocator, ent_mask, map_val);
+                break :blk self.groups.get(ent_mask) orelse unreachable;
             };
         }
     };
