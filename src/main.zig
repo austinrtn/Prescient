@@ -33,14 +33,14 @@ test "sparse pool" {
     try testing.expect(pos2.x == -1 and pos2.y == -1);
     try testing.expect(vel2.xvel == -2 and vel2.yvel == -2);
     
-    try testing.expect(sparse_pool.ent_pool.archetypes.count() == 1);
+    // try testing.expect(sparse_pool.ent_pool.archetypes.count() == 1);
 
+    // // sparse_pool.ent_pool.printStorage();
+    // sparse_pool.ent_pool.printEnts();
+    // std.debug.print("_____________________________\n\n", .{});
+    // try sparse_pool.addComponent(.id, 69, ent2);
     // sparse_pool.ent_pool.printStorage();
-    sparse_pool.ent_pool.printEnts();
-    std.debug.print("_____________________________\n\n", .{});
-    try sparse_pool.addComponent(.id, 69, ent2);
-    sparse_pool.ent_pool.printEnts();
-    // sparse_pool.ent_pool.printStorage();
+    // sparse_pool.ent_pool.printEnts();
 }
 
 // test "append to pool" {

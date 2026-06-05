@@ -19,6 +19,10 @@ pub fn ComponentRegistryT(comptime comp_descs: []const ComponentDesc) type {
         pub fn getCompTypeByEnum(comptime component: Enum) type {
             return string_type_map.get(@tagName(component)) orelse unreachable;
         }
+
+        pub fn maskContainsComponent(comptime component: Enum, mask: BitSet) bool {
+            return mask.isSet(@intFromEnum(component));
+        }
         
         pub fn GetCompTypeByName(comptime component: []const u8) type {
             return string_type_map.get(component) orelse unreachable;
