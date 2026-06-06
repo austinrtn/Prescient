@@ -67,5 +67,5 @@ test "append to pool" {
     try testing.expect(pos2.x == -1 and pos2.y == -1);
     try testing.expect(vel2.xvel == -2 and vel2.yvel == -2);
     // try archetype_pool.addComponent(.id, 69, ent2);
-    archetype_pool.deleteEnt(ent2);
+    try archetype_pool.addComponent(.id, 69, ent2);
 }

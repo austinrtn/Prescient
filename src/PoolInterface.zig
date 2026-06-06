@@ -47,18 +47,24 @@ pub fn PoolInterface(comptime pool_config: PR.Config) type {
         pub fn addComponent(self: *Self, comptime component: Component, comp_data: anytype, entity_id: Registry.EntityId) !void {
             var slot = self.id_manager.getSlot(entity_id);
             const converted_comp_data = CR.convertAnomToComponent(comp_data, @tagName(component));
-            const res = try self.ent_pool.addComponent(component, converted_comp_data, slot.group_index, slot.member_index);
-
-            slot.group_index = res.new_group_index;
-            slot.member_index = res.new_member_index;
-
-            if (res.swapped_entity_id) |swapped_entity_id| {
-                var swapped_slot = self.id_manager.getSlot(swapped_entity_id);
-                swapped_slot.member_index = res.swapped_member_index.?;
-                try self.id_manager.setSlot(swapped_slot);
+            if(pool_config.storage_strategy == .sparse_set) {
+                const res = try self.ent_pool.addComponent(component, converted_comp_data, slot.group_index, slot.member_index);
+    
+                slot.group_index = res.new_group_index;
+                slot.member_index = res.new_member_index;
+    
+                if (res.swapped_entity_id) |swapped_entity_id| {
+                    var swapped_slot = self.id_manager.getSlot(swapped_entity_id);
+                    swapped_slot.member_index = res.swapped_member_index.?;
+                    try self.id_manager.setSlot(swapped_slot);
+                }
+    
+                try self.id_manager.setSlot(slot);
             }
 
-            try self.id_manager.setSlot(slot);
+            else {
+                try self.ent_pool.addComponent(component, converted_comp_data, slot.group_index, slot.member_index);
+            }
         }
     };
 }

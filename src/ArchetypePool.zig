@@ -66,19 +66,32 @@ pub fn ArchetypePool(comptime config: Config) type {
         };
         
         pub fn addComponent(self: *Self, comptime component: Component, comp_value: CR.getCompTypeByEnum(component), 
-            group_index: Registry.GroupIndex, member_index: Registry.MemberIndex,) !AddComponentReturnType {
-                const old_mask = self.groups.keys()[group_index];
+            group_index: Registry.GroupIndex, member_index: Registry.MemberIndex,) !void {
+                const old_mask = self.groups.keys()[group_index.idx()];
                 const group = self.getGroupByIndex(group_index).group;
                 // will probalby need remove to return memeber idx
                 group.remove(member_index);
 
                 const new_mask = CR.addComponentBit(component, old_mask);
                 const new_group = try self.getOrCreateArchetype(new_mask);
+                _ = new_group;
+                _ = comp_value;
+
+                // Probably need to add buffer for getcompsfrommask
+                const mask_comps = CR.getComponentsFromMask(old_mask);
+                var comp_data = CR.initNullableComponentBuild();
+
+                for(mask_comps) |comp| {
+                    switch (comp) {
+                        inline else => |c| {
+                            @field(comp_data, @tagName(c)) = self.getComponent(c, group_index, member_index);
+                        }
+                    }
+                }
 
                 // When appending ent component data in archetype pool, I will probably need to have a function that 
                 // returns a struct of all pool components, and will return fields either with data or null based on mask bitset value
-                try new_group.group.append(ent: anytype, entity_id: TypedIndex(u32))
-
+                //try new_group.group.append(ent: anytype, entity_id: TypedIndex(u32))
         }
 
         pub fn getArchetypesContainingBitset(self: Self, mask: CR.BitSet) ![]CR.BitSet {
