@@ -48,9 +48,9 @@ pub fn ArchetypePool(comptime config: Config) type {
             return .{ .group_index = val.group_index, .member_index = member_idx };
         }
 
-        pub fn remove(self: *Self, group_index: Registry.GroupIndex, member_index: Registry.MemberIndex) void {
+        pub fn remove(self: *Self, group_index: Registry.GroupIndex, member_index: Registry.MemberIndex) ?Registry.EntityId {
             const group = self.groups.values()[group_index.idx()].group;
-            group.remove(member_index);
+            return group.remove(member_index);
         }
 
         pub fn getComponent(self: *Self, comptime component: Component, group_index: Registry.GroupIndex, member_index: Registry.MemberIndex) CR.getCompTypeByEnum(component) {
@@ -66,26 +66,27 @@ pub fn ArchetypePool(comptime config: Config) type {
         };
         
         pub fn addComponent(self: *Self, comptime component: Component, comp_value: CR.getCompTypeByEnum(component), 
-            group_index: Registry.GroupIndex, member_index: Registry.MemberIndex,) !void {
+            group_index: Registry.GroupIndex, member_index: Registry.MemberIndex,) !AddComponentReturnType{
                 const old_mask = self.groups.keys()[group_index.idx()];
                 const group = self.getGroupByIndex(group_index).group;
                 // will probalby need remove to return memeber idx
-                group.remove(member_index);
+                const swapped_ent_id = group.remove(member_index);
 
                 const new_mask = CR.addComponentBit(component, old_mask);
                 const new_group = try self.getOrCreateArchetype(new_mask);
                 _ = new_group;
-                _ = comp_value;
 
                 // Probably need to add buffer for getcompsfrommask
-                const mask_comps = CR.getComponentsFromMask(old_mask);
-                var comp_data = CR.initNullableComponentBuild();
+                var comp_buf: [pool_comps.len] Component = undefined;
+                const mask_comps = CR.getComponentsFromMask(new_mask, &comp_buf);
+                var comp_data = CR.initNullableComponentBuild(pool_comps);
 
-                for(mask_comps) |comp| {
-                    switch (comp) {
-                        inline else => |c| {
-                            @field(comp_data, @tagName(c)) = self.getComponent(c, group_index, member_index);
-                        }
+                // This needs to happen before remove.  
+                inline for(pool_comps) |comp| {
+                    if(CR.maskContainsComponent(comp, new_mask)) {
+                        const field = &@field(comp_data, @tagName(comp));
+                        if(component != comp) field.* = self.getComponent(comp, group_index, member_index)
+                        else field.* = comp_value;
                     }
                 }
 
@@ -120,7 +121,7 @@ pub fn ArchetypePool(comptime config: Config) type {
                 const arch_ptr = try self.allocator.create(Archetype);
                 arch_ptr.* = .init(self.allocator);
 
-                const map_val: HashMapValue = .{ .group_index = .init(@intCast(self.groups.count())), .group = arch_ptr };
+                const map_val: HashMapValue = .{ .group_index = .init(self.groups.count()), .group = arch_ptr };
                 try self.groups.put(self.allocator, ent_mask, map_val);
                 break :blk self.groups.get(ent_mask) orelse unreachable;
             };

@@ -32,7 +32,7 @@ pub const IdManager = struct {
     pub fn getNextSlot(self: *Self) IdSlot {
         if (self.queue.pop()) |entity_id| return self.slots.items[entity_id.idx()];
 
-        const entity_id: Registry.EntityId = .init(@intCast(self.slots.items.len));
+        const entity_id: Registry.EntityId = .init(self.slots.items.len);
         return .{
             .entity_id = entity_id,
             .pool_id = undefined,

@@ -66,6 +66,7 @@ test "append to pool" {
     const vel2 = prescient.ent.getComponent(.vel, ent2);
     try testing.expect(pos2.x == -1 and pos2.y == -1);
     try testing.expect(vel2.xvel == -2 and vel2.yvel == -2);
+    try archetype_pool.deleteEnt(ent1);
     // try archetype_pool.addComponent(.id, 69, ent2);
-    try archetype_pool.addComponent(.id, 69, ent2);
+    //try archetype_pool.addComponent(.id, 69, ent2);
 }

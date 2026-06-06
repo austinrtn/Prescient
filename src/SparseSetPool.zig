@@ -105,8 +105,8 @@ pub fn SparseSetPool(comptime config: PR.Config) type {
             const val = try self.getOrCreateArchetype(entity_mask);
             const group = val.group;
 
-            const record_idx: Registry.RecordIndex = .init(@intCast(self.entity_records.items.len));
-            const member_idx: Registry.MemberIndex = .init(@intCast(group.items.len));
+            const record_idx: Registry.RecordIndex = .init(self.entity_records.items.len);
+            const member_idx: Registry.MemberIndex = .init(group.items.len);
             try group.append(self.allocator, record_idx);
 
             var entity_record: EntityRecordType = undefined;
@@ -119,7 +119,7 @@ pub fn SparseSetPool(comptime config: PR.Config) type {
                 const comp_store = &@field(self.comp_storage, field.name);
                 try comp_store.append(self.allocator, .{ .value = comp_converted, .entity_id = entity_id });
 
-                @field(entity_record, field.name) = Registry.ComponentIndex.init(@intCast(comp_store.items.len - 1));
+                @field(entity_record, field.name) = Registry.ComponentIndex.init(comp_store.items.len - 1);
             }
 
             try self.entity_records.append(self.allocator, entity_record);
@@ -165,11 +165,11 @@ pub fn SparseSetPool(comptime config: PR.Config) type {
             const new_mask = CR.addComponentBit(component, old_mask);
             const new_group = try self.getOrCreateArchetype(new_mask);
 
-            const new_member_idx: Registry.MemberIndex = .init(@intCast(new_group.group.items.len));
+            const new_member_idx: Registry.MemberIndex = .init(new_group.group.items.len);
             try comp_store.append(self.allocator, .{ .value = comp_value, .entity_id = entity_record.entity_id });
 
             try new_group.group.append(self.allocator, record_idx);
-            @field(entity_record.*, @tagName(component)) = Registry.ComponentIndex.init(@intCast(comp_store.items.len - 1));
+            @field(entity_record.*, @tagName(component)) = Registry.ComponentIndex.init(comp_store.items.len - 1);
 
             const result = blk: {
                 const swapped_ent_id = if (swapped_record_idx) |idx| self.entity_records.items[idx.idx()].entity_id else null;
@@ -193,7 +193,7 @@ pub fn SparseSetPool(comptime config: PR.Config) type {
                 group_ptr.* = .empty;
                 result.value_ptr.* = .{
                     .group = group_ptr,
-                    .group_index = .init(@intCast(result.index)),
+                    .group_index = .init(result.index),
                 };
             }
             return result.value_ptr.*;

@@ -34,9 +34,15 @@ pub fn PoolInterface(comptime pool_config: PR.Config) type {
             return slot.entity_id;
         }
 
-        pub fn deleteEnt(self:* Self, entity_id: Registry.EntityId) void {
+        pub fn deleteEnt(self:* Self, entity_id: Registry.EntityId) !void {
             const slot = self.id_manager.getSlot(entity_id);
-            self.ent_pool.remove(slot.group_index, slot.member_index);
+            const swapped_ent_id = self.ent_pool.remove(slot.group_index, slot.member_index);
+            
+            if(swapped_ent_id) |id| {
+                var swapped_ent = self.id_manager.getSlot(id);
+                swapped_ent.member_index = slot.member_index;
+                try self.id_manager.setSlot(swapped_ent);
+            }
         }
 
         pub fn getComponent(self: *Self, comptime component: Component, entity_id: Registry.EntityId) CR.getCompTypeByEnum(component) {

@@ -35,19 +35,17 @@ pub fn ComponentRegistryT(comptime comp_descs: []const ComponentDesc) type {
             return mask.isSet(@intFromEnum(component));
         }
                 
-        pub fn getComponentsFromMask(mask: BitSet) []Enum {
-            var components: [Count]Enum = undefined;
-            
+        pub fn getComponentsFromMask(mask: BitSet, comp_buf: []Enum) []Enum {
             var i: usize = 0;
             var set_bits: usize = 0;
             while(i < Count) : (i += 1) {
                 if(mask.isSet(i)) {
-                    components[i] = @enumFromInt(i);
+                    comp_buf[i] = @enumFromInt(i);
                     set_bits += 1;
                 }
             }
             
-            return components[0..set_bits];
+            return comp_buf[0..set_bits];
         }
 
         pub fn getComponentsFromType(comptime EntType: type) [std.meta.fields(EntType).len]Enum {
@@ -114,11 +112,31 @@ pub fn ComponentRegistryT(comptime comp_descs: []const ComponentDesc) type {
             );
         }
 
-        pub fn initNullableComponentBuild() NullableComponentBuild(comp_descs) {
-            var build: NullableComponentBuild(comp_descs) = undefined;
+        fn NullableComponentBuild(components: []const Enum) type {
+            var names: [components.len][]const u8 = undefined;
+            var types: [components.len]type = undefined;
+            var attrs: [components.len]std.builtin.Type.StructField.Attributes = undefined;
+            
+            inline for (components, 0..) |comp, i| {
+                const T = getCompTypeByEnum(comp);
+                names[i] = @tagName(comp);
+                types[i] = ?T;
+                attrs[i] = .{};
+            }
+            
+            return @Struct(
+                .auto,
+                null,
+                &names,
+                &types,
+                &attrs,
+            );
+        }
+        pub fn initNullableComponentBuild(comptime components: []const Enum) NullableComponentBuild(components) {
+            var build: NullableComponentBuild(components) = undefined;
 
-            inline for(comp_descs) |desc| {
-                @field(build, desc.name) = null;
+            inline for(components) |comp| {
+                @field(build, @tagName(comp)) = null;
             }
 
             return build;
@@ -173,22 +191,3 @@ fn stringTypeMap(comptime comp_descs: []const ComponentDesc) std.StaticStringMap
     return std.StaticStringMap(type).initComptime(values);
 }
 
-fn NullableComponentBuild(comptime comp_descs: []const ComponentDesc) type {
-    var names: [comp_descs.len][]const u8 = undefined;
-    var types: [comp_descs.len]type = undefined;
-    var attrs: [comp_descs.len]std.builtin.Type.StructField.Attributes = undefined;
-    
-    inline for (comp_descs, 0..) |desc, i| {
-        names[i] = desc.name;
-        types[i] = ?desc.T;
-        attrs[i] = .{};
-    }
-    
-    return @Struct(
-        .auto,
-        null,
-        &names,
-        &types,
-        &attrs,
-    );
-}

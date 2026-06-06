@@ -33,8 +33,13 @@ pub const Registry = struct {
             pub const type_name = name;
             val: T,
 
-            pub fn init(val: T) @This() {
-                return .{ .val = val };
+            pub fn init(val: anytype) @This() {
+                switch (@typeInfo(@TypeOf(val))) {
+                    .int, .comptime_int => {},
+                    else => @compileError("TypedIndex value must be of type int!\n"),
+                }
+                const casted_val: T = @intCast(val);
+                return .{ .val = casted_val };
             }
 
             pub fn idx(self: @This()) usize {
