@@ -48,7 +48,7 @@ pub fn ArchetypePool(comptime config: Config) type {
             return .{ .group_index = val.group_index, .member_index = member_idx };
         }
 
-        pub fn remove(self: *Self, group_index: Registry.GroupIndex, member_index: Registry.MemberIndex) ?Registry.EntityId {
+        pub fn removeEnt(self: *Self, group_index: Registry.GroupIndex, member_index: Registry.MemberIndex) ?Registry.EntityId {
             const group = self.groups.values()[group_index.idx()].group;
             return group.remove(member_index);
         }
@@ -66,33 +66,36 @@ pub fn ArchetypePool(comptime config: Config) type {
         };
         
         pub fn addComponent(self: *Self, comptime component: Component, comp_value: CR.getCompTypeByEnum(component), 
-            group_index: Registry.GroupIndex, member_index: Registry.MemberIndex,) !AddComponentReturnType{
+            entity_id: Registry.EntityId, group_index: Registry.GroupIndex, member_index: Registry.MemberIndex,) !AddComponentReturnType{
                 const old_mask = self.groups.keys()[group_index.idx()];
-                const group = self.getGroupByIndex(group_index).group;
-                // will probalby need remove to return memeber idx
-                const swapped_ent_id = group.remove(member_index);
-
                 const new_mask = CR.addComponentBit(component, old_mask);
-                const new_group = try self.getOrCreateArchetype(new_mask);
-                _ = new_group;
-
-                // Probably need to add buffer for getcompsfrommask
-                var comp_buf: [pool_comps.len] Component = undefined;
-                const mask_comps = CR.getComponentsFromMask(new_mask, &comp_buf);
-                var comp_data = CR.initNullableComponentBuild(pool_comps);
-
-                // This needs to happen before remove.  
+                
+                const group = self.getGroupByIndex(group_index).group;
+                
+                // var comp_buf: [pool_comps.len] Component = undefined;
+                // const mask_comps = CR.getComponentsFromMask(new_mask, &comp_buf);
+                
+                var comp_data = CR.initMaskToPartialComponentStruct(pool_comps);
                 inline for(pool_comps) |comp| {
                     if(CR.maskContainsComponent(comp, new_mask)) {
                         const field = &@field(comp_data, @tagName(comp));
-                        if(component != comp) field.* = self.getComponent(comp, group_index, member_index)
+                        if(component != comp) {
+                            field.* = self.getComponent(comp, group_index, member_index);
+                        }
                         else field.* = comp_value;
                     }
                 }
 
-                // When appending ent component data in archetype pool, I will probably need to have a function that 
-                // returns a struct of all pool components, and will return fields either with data or null based on mask bitset value
-                //try new_group.group.append(ent: anytype, entity_id: TypedIndex(u32))
+                const append_res = try self.addEnt(comp_data, entity_id);
+
+                const swapped_ent_id = group.remove(member_index);
+
+                return .{
+                    .new_group_index = append_res.group_index,
+                    .new_member_index = append_res.member_index,
+                    .swapped_entity_id = swapped_ent_id,
+                    .swapped_member_index = member_index
+                };
         }
 
         pub fn getArchetypesContainingBitset(self: Self, mask: CR.BitSet) ![]CR.BitSet {

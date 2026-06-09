@@ -37,16 +37,25 @@ pub fn Archetype(comptime components: []const Component) type {
         }
 
         pub fn append(self: *Self, ent: anytype, entity_id: Registry.EntityId) !Registry.MemberIndex {
-            const EntT = @TypeOf(ent);
-
+             const EntType = @TypeOf(ent);
             try self.entity_ids.append(self.allocator, entity_id);
-
-            inline for (std.meta.fields(EntT)) |field| {
-                if (@hasField(Storage, field.name)) {
-                    const ent_field = @field(ent, field.name);
-                    const comp_converted = CR.convertAnomToComponent(ent_field, field.name);
-                    try @field(self.comp_storage, field.name).append(self.allocator, comp_converted);
+            
+            inline for (components) |comp| {
+                const field_name = @tagName(comp);
+                if(@hasField(EntType, field_name)) {
+                    const comp_value = @field(ent, field_name);
+                    const comp_info = @typeInfo(@TypeOf(comp_value));
+    
+                    if(comp_info == .optional and comp_value != null) {
+                        try @field(self.comp_storage, field_name).append(self.allocator, comp_value.?);
+                    } else if(comp_info != .optional){
+                        try @field(self.comp_storage, field_name).append(self.allocator, comp_value);
+                    }
                 }
+                // if (@hasField(Storage, field.name)) {
+                //     const ent_field = @field(ent, field.name);
+                //     const comp_converted = CR.convertAnomToComponent(ent_field, field.name);
+                // }
             }
 
             self.count += 1;

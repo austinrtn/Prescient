@@ -73,6 +73,39 @@ pub fn ComponentRegistryT(comptime comp_descs: []const ComponentDesc) type {
             return @intFromEnum(component);
         }
 
+        pub fn EntTypeToCompStruct(comptime EntType: type) type {
+            const fields = std.meta.fields(EntType);
+            var names: [fields.len][]const u8 = undefined;
+            var types: [fields.len]type = undefined;
+            var attrs: [fields.len]std.builtin.Type.StructField.Attributes = undefined;
+            
+            for (fields, 0..) |field, i| {
+                names[i] = field.name;
+                types[i] = GetCompTypeByName(field.name);
+                attrs[i] = .{};
+            }
+            
+            return @Struct(
+                .auto,
+                null,
+                &names,
+                &types,
+                &attrs,
+            );
+        }
+
+        pub fn AnomToTypedComponentStruct(anom_ent: anytype) EntTypeToCompStruct(@TypeOf(anom_ent)){
+            const EntType = @TypeOf(anom_ent);
+            var container: EntTypeToCompStruct(EntType) = undefined;
+
+            inline for(std.meta.fields(EntType)) |field| {
+                const anom_comp = @field(anom_ent, field.name);
+                @field(container, field.name) = convertAnomToComponent(anom_comp, field.name);
+            }
+
+            return container;
+        }
+
         pub fn convertAnomToComponent(anom: anytype, comptime comp_name: []const u8) GetCompTypeByName(comp_name) {
             const AnomType = @TypeOf(anom);
             const CompType = GetCompTypeByName(comp_name); 
@@ -112,7 +145,7 @@ pub fn ComponentRegistryT(comptime comp_descs: []const ComponentDesc) type {
             );
         }
 
-        fn NullableComponentBuild(components: []const Enum) type {
+        fn MaskToPartialComponentStruct(components: []const Enum) type {
             var names: [components.len][]const u8 = undefined;
             var types: [components.len]type = undefined;
             var attrs: [components.len]std.builtin.Type.StructField.Attributes = undefined;
@@ -132,8 +165,8 @@ pub fn ComponentRegistryT(comptime comp_descs: []const ComponentDesc) type {
                 &attrs,
             );
         }
-        pub fn initNullableComponentBuild(comptime components: []const Enum) NullableComponentBuild(components) {
-            var build: NullableComponentBuild(components) = undefined;
+        pub fn initMaskToPartialComponentStruct(comptime components: []const Enum) MaskToPartialComponentStruct(components) {
+            var build: MaskToPartialComponentStruct(components) = undefined;
 
             inline for(components) |comp| {
                 @field(build, @tagName(comp)) = null;
@@ -190,4 +223,3 @@ fn stringTypeMap(comptime comp_descs: []const ComponentDesc) std.StaticStringMap
 
     return std.StaticStringMap(type).initComptime(values);
 }
-

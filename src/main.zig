@@ -46,9 +46,18 @@ test "sparse set pool" {
     // }
     const id = sparse_set_pool.getComponent(.id, ent2);
     try testing.expect(id == 69);
+
+    sparse_set_pool.ent_pool.printEnts();
+    sparse_set_pool.ent_pool.printStorage();
+    std.debug.print("_____________________________________\n\n", .{});
+    
+    try sparse_set_pool.deleteEnt(ent2);
+    sparse_set_pool.ent_pool.printEnts();
+    sparse_set_pool.ent_pool.printStorage();
+    std.debug.print("_____________________________________\n\n", .{});
 }
 
-test "append to pool" {
+test "archetype pool" {
     var prescient: *Prescient = try .init(testing.allocator);
     defer prescient.deinit();
 
@@ -66,7 +75,10 @@ test "append to pool" {
     const vel2 = prescient.ent.getComponent(.vel, ent2);
     try testing.expect(pos2.x == -1 and pos2.y == -1);
     try testing.expect(vel2.xvel == -2 and vel2.yvel == -2);
-    try archetype_pool.deleteEnt(ent1);
-    // try archetype_pool.addComponent(.id, 69, ent2);
+    //try archetype_pool.deleteEnt(ent1);
+    try archetype_pool.addComponent(.id, 69, ent2);
     //try archetype_pool.addComponent(.id, 69, ent2);
+    const id = archetype_pool.getComponent(.id, ent2);
+    try testing.expect(id == 69);
+    try archetype_pool.deleteEnt(ent2);
 }
