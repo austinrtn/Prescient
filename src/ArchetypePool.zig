@@ -14,7 +14,7 @@ pub fn ArchetypePool(comptime config: Config) type {
     const pool_comps = config.components;
     const ARCHETYPE = ArchetypeStorageT(pool_comps);
     const TAG = std.meta.stringToEnum(PR.Enum, config.name) orelse unreachable;
-    const HashMapValue = struct { group_index: Registry.GroupIndex, group: *ARCHETYPE };
+    const GroupEntry = struct { group_index: Registry.GroupIndex, group: *ARCHETYPE };
     const AppendData = struct { group_index: Registry.GroupIndex, member_index: Registry.MemberIndex };
 
     return struct {
@@ -24,7 +24,7 @@ pub fn ArchetypePool(comptime config: Config) type {
         pub const pool_mask = getBitmask(pool_comps);
 
         allocator: std.mem.Allocator,
-        groups: HashMap(CR.BitSet, HashMapValue) = .empty,
+        groups: HashMap(CR.BitSet, GroupEntry) = .empty,
 
         pub fn init(allocator: std.mem.Allocator) Self {
             const self: Self = .{ .allocator = allocator };
@@ -110,21 +110,21 @@ pub fn ArchetypePool(comptime config: Config) type {
             return matches.toOwnedSlice(self.allocator);
         }
 
-        pub fn getArchetype(self: *Self, ent_mask: CR.BitSet) HashMapValue {
+        pub fn getArchetype(self: *Self, ent_mask: CR.BitSet) GroupEntry {
             return self.groups.get(ent_mask) orelse unreachable;
         }
 
-        pub fn getGroupByIndex(self: *Self, group_index: Registry.GroupIndex) HashMapValue {
+        pub fn getGroupByIndex(self: *Self, group_index: Registry.GroupIndex) GroupEntry {
             return self.groups.values()[group_index.idx()];
         }
 
-        fn getOrCreateArchetype(self: *Self, ent_mask: CR.BitSet) !HashMapValue {
+        fn getOrCreateArchetype(self: *Self, ent_mask: CR.BitSet) !GroupEntry {
             const archetype = self.groups.get(ent_mask);
             return archetype orelse blk: {
                 const arch_ptr = try self.allocator.create(Archetype);
                 arch_ptr.* = .init(self.allocator);
 
-                const map_val: HashMapValue = .{ .group_index = .init(self.groups.count()), .group = arch_ptr };
+                const map_val: GroupEntry = .{ .group_index = .init(self.groups.count()), .group = arch_ptr };
                 try self.groups.put(self.allocator, ent_mask, map_val);
                 break :blk self.groups.get(ent_mask) orelse unreachable;
             };

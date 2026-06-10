@@ -7,7 +7,7 @@ const Component = CR.Enum;
 const getBitmask = CR.getBitmaskOfComponents;
 const Registry = @import("Registry.zig").Registry;
 
-fn ComponentStorage(comptime components: []const Component) type {
+fn SparseSetStorage(comptime components: []const Component) type {
     var names: [components.len][]const u8 = undefined;
     var types: [components.len]type = undefined;
     var attrs: [components.len]std.builtin.Type.StructField.Attributes = undefined;
@@ -71,12 +71,12 @@ fn EntityRecordType(comptime components: []const Component) type {
 
 pub fn SparseSetPool(comptime config: PR.Config) type {
     const pool_comps = config.components;
-    const Storage = ComponentStorage(config.components);
+    const Storage = SparseSetStorage(config.components);
     const StorageFields = std.meta.fields(Storage);
     const EntityRecord = EntityRecordType(config.components);
     const TAG = std.meta.stringToEnum(PR.Enum, config.name) orelse unreachable;
     const AppendData = struct { group_index: Registry.GroupIndex, member_index: Registry.MemberIndex };
-    const HashMapValue = struct { group_index: Registry.GroupIndex, group: *ArrayList(Registry.RecordIndex) };
+    const GroupEntry = struct { group_index: Registry.GroupIndex, group: *ArrayList(Registry.RecordIndex) };
 
     return struct {
         const Self = @This();
@@ -84,7 +84,7 @@ pub fn SparseSetPool(comptime config: PR.Config) type {
         pub const pool_mask = getBitmask(pool_comps);
 
         allocator: std.mem.Allocator,
-        groups: HashMap(CR.BitSet, HashMapValue) = .empty,
+        groups: HashMap(CR.BitSet, GroupEntry) = .empty,
         entity_records: ArrayList(EntityRecord) = .empty,
         comp_storage: Storage = undefined,
         count: usize = 0,
@@ -169,7 +169,7 @@ pub fn SparseSetPool(comptime config: PR.Config) type {
                 }
             }
 
-            const member_idx_swapped = blk: {
+            const swapped_ent_id = blk: {
                 const last_idx = group.items.len - 1;
                 if(last_idx != member_index.idx()) {
                     const swapped_record_idx =  group.items[last_idx];
@@ -182,7 +182,7 @@ pub fn SparseSetPool(comptime config: PR.Config) type {
             
             _ = group.swapRemove(member_index.idx());
             self.count -= 1;
-            return member_idx_swapped; 
+            return swapped_ent_id; 
         }
 
         pub fn getComponent(self: *Self, comptime component: Component, group_index: Registry.GroupIndex, member_index: Registry.MemberIndex) CR.getCompTypeByEnum(component) {
@@ -242,7 +242,7 @@ pub fn SparseSetPool(comptime config: PR.Config) type {
             return result;
         }
 
-        pub fn getOrCreateArchetype(self: *Self, ent_mask: CR.BitSet) !HashMapValue {
+        pub fn getOrCreateArchetype(self: *Self, ent_mask: CR.BitSet) !GroupEntry {
             const result = try self.groups.getOrPut(self.allocator, ent_mask);
             if (!result.found_existing) {
                 const group_ptr = try self.allocator.create(ArrayList(Registry.RecordIndex));
