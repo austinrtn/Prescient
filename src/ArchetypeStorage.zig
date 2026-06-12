@@ -4,6 +4,8 @@ const CR = @import("ComponentRegistry.zig").ComponentRegistry;
 const Component = CR.Enum;
 const ComponentStorage = @import("ComponentStorage.zig").ComponentStorage;
 const Registry = @import("Registry.zig").Registry;
+const EntityId = Registry.EntityId;
+const MemberIndex = Registry.MemberIndex;
 
 pub fn Archetype(comptime components: []const Component) type {
     const Storage = ComponentStorage(components);
@@ -17,8 +19,8 @@ pub fn Archetype(comptime components: []const Component) type {
         pub const Components = components;
         pub const mask = bit_mask;
         allocator: std.mem.Allocator,
-        entity_ids: ArrayList(Registry.EntityId) = .empty,
-        member_indices: ArrayList(Registry.MemberIndex) = .empty,
+        entity_ids: ArrayList(EntityId) = .empty,
+        member_indices: ArrayList(MemberIndex) = .empty,
         comp_storage: Storage = undefined,
         count: usize = 0,
 
@@ -36,7 +38,7 @@ pub fn Archetype(comptime components: []const Component) type {
             self.entity_ids.deinit(self.allocator);
         }
 
-        pub fn append(self: *Self, ent: anytype, entity_id: Registry.EntityId) !Registry.MemberIndex {
+        pub fn append(self: *Self, ent: anytype, entity_id: EntityId) !MemberIndex {
              const EntType = @TypeOf(ent);
             try self.entity_ids.append(self.allocator, entity_id);
             
@@ -59,13 +61,13 @@ pub fn Archetype(comptime components: []const Component) type {
             }
 
             self.count += 1;
-            const memeber_idx: Registry.MemberIndex = .init(self.count - 1);
+            const memeber_idx: MemberIndex = .init(self.count - 1);
             try self.member_indices.append(self.allocator, memeber_idx);
             
             return memeber_idx;
         }
 
-        pub fn remove(self: *Self, member_index: Registry.MemberIndex) ?Registry.EntityId {
+        pub fn remove(self: *Self, member_index: MemberIndex) ?EntityId {
             const member_idx = member_index.idx();
             const last_member_idx = self.member_indices.items[self.count - 1];
             const swapped_ent_id = if(!member_index.eql(last_member_idx)) self.entity_ids.items[self.count - 1] else null;
@@ -81,8 +83,14 @@ pub fn Archetype(comptime components: []const Component) type {
             return swapped_ent_id;
         }
 
-        pub fn getComponent(self: *Self, comptime component: Component, member_index: Registry.MemberIndex) CR.getCompTypeByEnum(component) {
-            return @field(self.comp_storage, @tagName(component)).items[member_index.idx()];
+        pub fn getComponent(self: *Self, comptime component: Component, member_index: MemberIndex) CR.getCompTypeByEnum(component) {
+            const comp_array = &@field(self.comp_storage, @tagName(component));
+            return comp_array.items[member_index.idx()];
+        }
+
+        pub fn setComponent(self: *Self, comptime component: Component, component_data: CR.getCompTypeByEnum(component), member_index: MemberIndex) void {
+            const comp_array = &@field(self.comp_storage, @tagName(component));
+            comp_array.items[member_index.idx()] = component_data;
         }
 
         pub fn getFields(self: *Self) EntTypeSlices {

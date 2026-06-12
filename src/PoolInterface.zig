@@ -1,9 +1,11 @@
+const std = @import("std");
 const CR = @import("ComponentRegistry.zig").ComponentRegistry;
 const Component = CR.Enum;
 const EntPoolType = @import("EntPool.zig").EntPool;
 const PR = @import("PoolRegistry.zig").PoolRegistry;
 const IdManager = @import("IdManager.zig").IdManager;
 const Registry = @import("Registry.zig").Registry;
+const EntityId = Registry.EntityId;
 
 pub fn PoolInterface(comptime pool_config: PR.Config) type {
     const EntPool = EntPoolType(pool_config);
@@ -22,7 +24,7 @@ pub fn PoolInterface(comptime pool_config: PR.Config) type {
             };
         }
 
-        pub fn createEnt(self: *Self, ent: anytype) !Registry.EntityId {
+        pub fn createEnt(self: *Self, ent: anytype) !EntityId {
             var slot = self.id_manager.getNextSlot();
             const converted_ent = CR.AnomToTypedComponentStruct(ent);
             const new_location = try self.ent_pool.addEnt(converted_ent, slot.entity_id);
@@ -35,7 +37,7 @@ pub fn PoolInterface(comptime pool_config: PR.Config) type {
             return slot.entity_id;
         }
 
-        pub fn deleteEnt(self:* Self, entity_id: Registry.EntityId) !void {
+        pub fn deleteEnt(self:* Self, entity_id: EntityId) !void {
             const slot = self.id_manager.getSlot(entity_id);
             const swapped_ent_id = self.ent_pool.removeEnt(slot.group_index, slot.member_index);
             
@@ -46,14 +48,42 @@ pub fn PoolInterface(comptime pool_config: PR.Config) type {
             }
         }
 
-        pub fn getComponent(self: *Self, comptime component: Component, entity_id: Registry.EntityId) CR.getCompTypeByEnum(component) {
+        pub fn getComponent(self: *Self, entity_id: EntityId, comptime component: Component) CR.getCompTypeByEnum(component) {
             const slot = self.id_manager.getSlot(entity_id);
             return self.ent_pool.getComponent(component, slot.group_index, slot.member_index);
         }
 
-        pub fn addComponent(self: *Self, comptime component: Component, comp_data: anytype, entity_id: Registry.EntityId) !void {
+        pub fn getComponents(self: *Self, entity_id: EntityId, comptime components: []const Component) CR.GetTypeOfComponents(components, false) {
+            const slot = self.id_manager.getSlot(entity_id);
+            var comp_build: CR.GetTypeOfComponents(components, false) = undefined;
+
+            inline for(components) |comp| {
+                @field(comp_build, @tagName(comp)) = self.ent_pool.getComponent(comp, slot.group_index, slot.member_index);
+            }
+            return comp_build;
+        }
+
+        pub fn setComponents(self: *Self, entity_id: EntityId, component_values: anytype) void {
+            const slot = self.id_manager.getSlot(entity_id);
+
+            inline for(std.meta.fields(@TypeOf(component_values))) |field| {
+                const comp_tag = comptime std.meta.stringToEnum(Component, field.name) orelse @compileError("Component " ++ field.name ++ " found in registry.\n"); 
+                const comp_val = @field(component_values, field.name); 
+                const comp_value = CR.convertAnomToComponent(comp_val, field.name);
+                self.ent_pool.setComponent(comp_tag, comp_value, slot.group_index, slot.member_index);
+            }
+        }
+
+        pub fn setComponent(self: *Self, entity_id: EntityId, comptime component: Component, component_value: anytype) void {
+            const slot = self.id_manager.getSlot(entity_id);
+            const converted_comp_data = CR.convertAnomToComponent(component_value, @tagName(component));
+            
+            self.ent_pool.setComponent(component, converted_comp_data, slot.group_index, slot.member_index);
+        }
+
+        pub fn addComponent(self: *Self, entity_id: EntityId, comptime component: Component, component_value: anytype) !void {
             var slot = self.id_manager.getSlot(entity_id);
-            const converted_comp_data = CR.convertAnomToComponent(comp_data, @tagName(component));
+            const converted_comp_data = CR.convertAnomToComponent(component_value, @tagName(component));
             const res = try self.ent_pool.addComponent(component, converted_comp_data, entity_id, slot.group_index, slot.member_index);
 
             slot.group_index = res.new_group_index;

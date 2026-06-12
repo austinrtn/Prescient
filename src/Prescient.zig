@@ -6,6 +6,7 @@ const PR = @import("PoolRegistry.zig").PoolRegistry;
 const PoolManager = @import("PoolManager.zig").PoolManager;
 const PoolInterface = @import("PoolInterface.zig").PoolInterface;
 const IdManager = @import("IdManager.zig").IdManager;
+const EntityId = Registry.EntityId;
 
 pub const Prescient = struct {
     pub const Self = @This();
@@ -49,19 +50,19 @@ const EntNamespace = struct {
     pub const Self = @This();
     prescient: *Prescient,
 
-    pub fn create(self: *Self, comptime pool: PR.Enum, ent: anytype) !Registry.EntityId {
+    pub fn create(self: *Self, comptime pool: PR.Enum, ent: anytype) !EntityId {
         const ent_pool = self.prescient.pool_manager.getPool(pool);
         var pool_interface = PoolInterface(PR.getConfigByEnum(pool)).init(ent_pool, self.prescient.id_manager);
         return try pool_interface.createEnt(ent);
     }
 
-    pub fn getComponent(self: *Self, comptime component: Component, entity_id: Registry.EntityId) CR.getCompTypeByEnum(component) {
+    pub fn getComponent(self: *Self, entity_id: EntityId, comptime component: Component) CR.getCompTypeByEnum(component) {
         const slot = self.prescient.id_manager.getSlot(entity_id);
 
         switch (slot.pool_id) {
             inline else => |p| {
                 var pool_interface = self.prescient.getPool(p);
-                return pool_interface.getComponent(component, entity_id);
+                return pool_interface.getComponent(entity_id, component);
             },
         }
     }

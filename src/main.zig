@@ -21,40 +21,34 @@ test "sparse set pool" {
     var sparse_set_pool = prescient.getPool(.sparse_set);
     const ent1 = try sparse_set_pool.createEnt(.{ .pos = .{ .x = 1, .y = 1 }, .vel = .{ .xvel = 2, .yvel = 2 } });
 
-    const pos = sparse_set_pool.getComponent(.pos, ent1);
-    const vel = sparse_set_pool.getComponent(.vel, ent1);
+    const pos = sparse_set_pool.getComponent(ent1, .pos);
+    const vel = sparse_set_pool.getComponent(ent1, .vel);
     try testing.expect(pos.x == 1 and pos.y == 1);
     try testing.expect(vel.xvel == 2 and vel.yvel == 2);
 
     const ent2 = try prescient.ent.create(.sparse_set, .{ .pos = .{ .x = -1, .y = -1 }, .vel = .{ .xvel = -2, .yvel = -2 } });
 
-    const pos2 = prescient.ent.getComponent(.pos, ent2);
-    const vel2 = prescient.ent.getComponent(.vel, ent2);
+    const pos2 = prescient.ent.getComponent(ent2, .pos);
+    const vel2 = prescient.ent.getComponent(ent2, .vel);
     try testing.expect(pos2.x == -1 and pos2.y == -1);
     try testing.expect(vel2.xvel == -2 and vel2.yvel == -2);
 
     try testing.expect(sparse_set_pool.ent_pool.groups.count() == 1);
 
-    // sparse_set_pool.ent_pool.printStorage();
-    //sparse_set_pool.ent_pool.printEnts();
-    //std.debug.print("_____________________________\n\n", .{});
-    try sparse_set_pool.addComponent(.id, 69, ent2);
-    // sparse_set_pool.ent_pool.printStorage();
-    //sparse_set_pool.ent_pool.printEnts();
-    // for (sparse_set_pool.ent_pool.entity_records.items) |record| {
-    //     std.debug.print("{any}\n", .{record});
-    // }
-    const id = sparse_set_pool.getComponent(.id, ent2);
+    try sparse_set_pool.addComponent(ent2, .id, 65);
+    sparse_set_pool.setComponent(ent2, .id, 69);
+    const id = sparse_set_pool.getComponent(ent2, .id);
     try testing.expect(id == 69);
 
-    sparse_set_pool.ent_pool.printEnts();
-    sparse_set_pool.ent_pool.printStorage();
-    std.debug.print("_____________________________________\n\n", .{});
-    
     try sparse_set_pool.deleteEnt(ent2);
-    sparse_set_pool.ent_pool.printEnts();
-    sparse_set_pool.ent_pool.printStorage();
-    std.debug.print("_____________________________________\n\n", .{});
+
+    var comps = sparse_set_pool.getComponents(ent1, &.{.pos, .vel});
+    comps.pos.x += 1;
+    comps.vel.yvel += 1;
+    sparse_set_pool.setComponents(ent1, comps);
+    
+    try testing.expect(comps.pos.x == 2);
+    try testing.expect(comps.vel.yvel == 3);
 }
 
 test "archetype pool" {
@@ -64,21 +58,22 @@ test "archetype pool" {
     var archetype_pool = prescient.getPool(.archetype);
     const ent1 = try archetype_pool.createEnt(.{ .pos = .{ .x = 1, .y = 1 }, .vel = .{ .xvel = 2, .yvel = 2 } });
 
-    const pos = archetype_pool.getComponent(.pos, ent1);
-    const vel = archetype_pool.getComponent(.vel, ent1);
+    const pos = archetype_pool.getComponent(ent1, .pos);
+    const vel = archetype_pool.getComponent(ent1, .vel);
     try testing.expect(pos.x == 1 and pos.y == 1);
     try testing.expect(vel.xvel == 2 and vel.yvel == 2);
 
     const ent2 = try prescient.ent.create(.sparse_set, .{ .pos = .{ .x = -1, .y = -1 }, .vel = .{ .xvel = -2, .yvel = -2 } });
 
-    const pos2 = prescient.ent.getComponent(.pos, ent2);
-    const vel2 = prescient.ent.getComponent(.vel, ent2);
+    const pos2 = prescient.ent.getComponent(ent2, .pos);
+    const vel2 = prescient.ent.getComponent(ent2, .vel);
     try testing.expect(pos2.x == -1 and pos2.y == -1);
     try testing.expect(vel2.xvel == -2 and vel2.yvel == -2);
-    //try archetype_pool.deleteEnt(ent1);
-    try archetype_pool.addComponent(.id, 69, ent2);
-    //try archetype_pool.addComponent(.id, 69, ent2);
-    const id = archetype_pool.getComponent(.id, ent2);
+    
+    try archetype_pool.addComponent(ent2, .id, 65);
+    archetype_pool.setComponent(ent2, .id, 69);
+    
+    const id = archetype_pool.getComponent(ent2, .id);
     try testing.expect(id == 69);
     try archetype_pool.deleteEnt(ent2);
 }
