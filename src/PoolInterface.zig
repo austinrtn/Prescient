@@ -97,5 +97,11 @@ pub fn PoolInterface(comptime pool_config: PR.Config) type {
 
             try self.id_manager.setSlot(slot);
         }
+        
+        fn validateComponent(comptime component: anytype) void {
+            if(!CR.maskContainsComponent(component, pool_mask)) {
+                @compileError("Component " ++ @tagName(component) ++ " is not a member of Entity Pool " ++ config.name ++ "\n");
+            }
+        }
     };
 }
