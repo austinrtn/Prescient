@@ -9,6 +9,7 @@ const EntityId = Registry.EntityId;
 
 pub fn PoolInterface(comptime pool_config: PR.Config) type {
     const EntPool = EntPoolType(pool_config);
+    const pool_mask = CR.getBitmaskOfComponents(pool_config.components);
 
     return struct {
         const Self = @This();
@@ -26,6 +27,7 @@ pub fn PoolInterface(comptime pool_config: PR.Config) type {
 
         pub fn createEnt(self: *Self, ent: anytype) !EntityId {
             var slot = self.id_manager.getNextSlot();
+            inline for(std.meta.fields(@TypeOf(ent))) |field| validateComponent(CR.getEnumByName(field.name));
             const converted_ent = CR.AnomToTypedComponentStruct(ent);
             const new_location = try self.ent_pool.addEnt(converted_ent, slot.entity_id);
 
@@ -98,9 +100,11 @@ pub fn PoolInterface(comptime pool_config: PR.Config) type {
             try self.id_manager.setSlot(slot);
         }
         
-        fn validateComponent(comptime component: anytype) void {
-            if(!CR.maskContainsComponent(component, pool_mask)) {
-                @compileError("Component " ++ @tagName(component) ++ " is not a member of Entity Pool " ++ config.name ++ "\n");
+        fn validateComponent(comptime component: Component) void {
+            comptime {
+                if(!CR.maskContainsComponent(component, pool_mask)) {
+                    @compileError("Component " ++ @tagName(component) ++ " is not a member of Entity Pool " ++ pool_config.name ++ "\n");
+                }
             }
         }
     };

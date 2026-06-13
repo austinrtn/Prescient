@@ -19,7 +19,7 @@ test "sparse set pool" {
     defer prescient.deinit();
 
     var sparse_set_pool = prescient.getPool(.sparse_set);
-    const ent1 = try sparse_set_pool.createEnt(.{ .pos = .{ .x = 1, .y = 1 }, .vel = .{ .xvel = 2, .yvel = 2 } });
+    const ent1 = try sparse_set_pool.createEnt(.{ .pos = .{ .x = 1, .y = 1 }, .vel = .{ .xvel = 2, .yvel = 2 }});
 
     const pos = sparse_set_pool.getComponent(ent1, .pos);
     const vel = sparse_set_pool.getComponent(ent1, .vel);

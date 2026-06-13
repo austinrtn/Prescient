@@ -25,6 +25,11 @@ pub fn ComponentRegistryT(comptime comp_descs: []const ComponentDesc) type {
             return string_type_map.get(component) orelse unreachable;
         }
 
+        pub fn getEnumByName(comptime component_name: []const u8) Enum {
+            return std.meta.stringToEnum(Enum, component_name) orelse 
+                @compileError("Component " ++ component_name ++ " does not exist in registry");
+        }
+
         pub fn getBitmaskOfComponents(comptime components: []const Enum) BitSet {
             var mask: BitSet = .empty;
             for(components) |comp| mask.set(@intFromEnum(comp));
