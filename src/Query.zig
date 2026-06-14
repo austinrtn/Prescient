@@ -89,7 +89,7 @@ pub fn Query(comptime components: []const Component) type {
                     var return_group: QueryReturnType = undefined;
 
                     inline for (std.meta.fields(QueryReturnType)) |field| {
-                        @field(return_group, field.name) = @field(group_obj.group.comp_storage, field.name).items;
+                        @field(return_group, field.name) = @field(group_obj.group.comp_storage.inner_storage, field.name).items;
                     }
 
                     self.query_return = return_group;

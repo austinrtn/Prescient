@@ -2,8 +2,8 @@ const std = @import("std");
 const ArrayList = std.ArrayList;
 const HashMap = std.AutoArrayHashMapUnmanaged;
 const CR = @import("ComponentRegistry.zig").ComponentRegistry;
-const PR = @import("PoolRegistry.zig").PoolRegistry;
 const Component = CR.Enum;
+const PR = @import("PoolRegistry.zig").PoolRegistry;
 const getBitmask = CR.getBitmaskOfComponents;
 const Registry = @import("Registry.zig").Registry;
 const EntityId = Registry.EntityId;
@@ -11,6 +11,8 @@ const GroupIndex = Registry.GroupIndex;
 const MemberIndex = Registry.MemberIndex;
 const RecordIndex = Registry.RecordIndex;
 const ComponentIndex = Registry.ComponentIndex;
+const EntityRecordNS = @import("EntityRecord.zig");
+const EntityRecordType = EntityRecordNS.EntityRecord;
 
 fn ComponentWithOwner(comptime ComponentType: type) type { 
     return struct {
@@ -29,42 +31,6 @@ fn SparseSetStorage(comptime components: []const Component) type {
 
         names[i] = @tagName(comp);
         types[i] = ArrayList(ComponentWithOwner(CompType));
-        attrs[i] = .{};
-    }
-
-    return @Struct(
-        .auto,
-        null,
-        &names,
-        &types,
-        &attrs,
-    );
-}
-
-fn EntityRecordType(comptime components: []const Component) type {
-    var names: [components.len + 4][]const u8 = undefined;
-    var types: [components.len + 4]type = undefined;
-    var attrs: [components.len + 4]std.builtin.Type.StructField.Attributes = undefined;
-
-    names[0] = "entity_id";
-    types[0] = EntityId;
-    attrs[0] = .{};
-
-    names[1] = "group_index";
-    types[1] = GroupIndex;
-    attrs[1] = .{};
-    
-    names[2] = "member_index";
-    types[2] = MemberIndex;
-    attrs[2] = .{};
-    
-    names[3] = "record_index";
-    types[3] = RecordIndex;
-    attrs[3] = .{};
-    
-    for (components, 4..) |comp, i| {
-        names[i] = @tagName(comp);
-        types[i] = ?ComponentIndex;
         attrs[i] = .{};
     }
 
@@ -128,24 +94,24 @@ pub fn SparseSetPool(comptime config: PR.Config) type {
             const member_idx: MemberIndex = .init(group.items.len);
             try group.append(self.allocator, record_idx);
 
-            var entity_record: EntityRecord = undefined;
-            entity_record.entity_id = entity_id;
-            entity_record.group_index = val.group_index;
-            entity_record.record_index = record_idx;
-            entity_record.member_index = member_idx;
-            
-            inline for (pool_comps) |comp| @field(entity_record, @tagName(comp)) = null;
+            var ent_record: EntityRecord = .init(.{
+                .entity_id = entity_id,
+                .group_index = val.group_index,
+                .member_index = member_idx,
+                .record_index = record_idx,
+            });
 
             inline for (std.meta.fields(EntType)) |field| {
+                const comp_tag = comptime CR.getEnumByName(field.name);
                 const ent_field = @field(ent, field.name);
                 const comp_converted = CR.convertAnomToComponent(ent_field, field.name);
                 const comp_store = &@field(self.comp_storage, field.name);
                 try comp_store.append(self.allocator, .{ .value = comp_converted, .record_index = record_idx});
 
-                @field(entity_record, field.name) = ComponentIndex.init(comp_store.items.len - 1);
+                ent_record.setComponentIndex(comp_tag, comp_store.items.len - 1);
             }
 
-            try self.entity_records.append(self.allocator, entity_record);
+            try self.entity_records.append(self.allocator, ent_record);
             self.count += 1;
 
             return .{
@@ -157,12 +123,12 @@ pub fn SparseSetPool(comptime config: PR.Config) type {
         pub fn removeEnt(self: *Self, group_index: GroupIndex, member_index: MemberIndex) ?EntityId {
             const group = self.groups.values()[group_index.idx()].group;
             const record_idx = group.items[member_index.idx()];
-            const ent_record = self.entity_records.items[record_idx.idx()];
+            const ent_record = &self.entity_records.items[record_idx.idx()];
 
             inline for(pool_comps) |comp| {
                 const field_name = @tagName(comp);
                 // Need to get actual record struct here v
-                const component_index = @field(ent_record, field_name);
+                const component_index = ent_record.getComponentIndex(comp);
                 const comp_array = &@field(self.comp_storage, field_name);
 
                 if(component_index) |comp_index| {
@@ -171,7 +137,7 @@ pub fn SparseSetPool(comptime config: PR.Config) type {
                     if(swapped_comp) {
                         const comp_with_owner = comp_array.items[last_comp_index];
                         const record_of_swapped_ent = &self.entity_records.items[comp_with_owner.record_index.idx()];
-                        @field(record_of_swapped_ent, field_name) = comp_index;
+                        record_of_swapped_ent.setComponentIndex(comp, comp_index.val);
                     }
                     _ = comp_array.swapRemove(comp_index.idx());
                 }
@@ -194,12 +160,11 @@ pub fn SparseSetPool(comptime config: PR.Config) type {
         }
 
         pub fn getComponent(self: *Self, comptime component: Component, group_index: GroupIndex, member_index: MemberIndex) CR.getCompTypeByEnum(component) {
-            const comp_name = @tagName(component);
             const group = self.groups.values()[group_index.idx()].group;
 
             const record_idx = group.items[member_index.idx()];
-            const entity_record = self.entity_records.items[record_idx.idx()];
-            const comp_idx = @field(entity_record, comp_name).?;
+            const ent_record = &self.entity_records.items[record_idx.idx()];
+            const comp_idx = ent_record.getComponentIndex(component) orelse unreachable;
 
             const comp_array = @field(self.comp_storage, @tagName(component));
             return comp_array.items[comp_idx.idx()].value;
@@ -211,7 +176,7 @@ pub fn SparseSetPool(comptime config: PR.Config) type {
 
             const record_idx = group.items[member_index.idx()];
             const ent_record = self.entity_records.items[record_idx.idx()];
-            const comp_idx = @field(ent_record, comp_name).?;
+            const comp_idx = ent_record.getComponentIndex(component) orelse unreachable;
             const comp_array = &@field(self.comp_storage, comp_name);
             comp_array.items[comp_idx.idx()].value = component_value;
         }
@@ -244,7 +209,7 @@ pub fn SparseSetPool(comptime config: PR.Config) type {
             try comp_store.append(self.allocator, .{ .value = component_value, .record_index = entity_record.record_index});
 
             try new_group.group.append(self.allocator, record_idx);
-            @field(entity_record.*, @tagName(component)) = ComponentIndex.init(comp_store.items.len - 1);
+            entity_record.setComponentIndex(component, comp_store.items.len - 1);
 
             const result = blk: {
                 const swapped_ent_id = if (swapped_record_idx) |idx| self.entity_records.items[idx.idx()].entity_id else null;

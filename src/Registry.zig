@@ -31,6 +31,7 @@ pub const Registry = struct {
     pub fn TypedIndex(comptime T: type, comptime name: []const u8) type {
         return struct {
             pub const type_name = name;
+            pub const ValueType = T;
             val: T,
 
             pub fn init(val: anytype) @This() {

@@ -40,7 +40,6 @@ test "sparse set pool" {
     const id = sparse_set_pool.getComponent(ent2, .id);
     try testing.expect(id == 69);
 
-    try sparse_set_pool.deleteEnt(ent2);
 
     var comps = sparse_set_pool.getComponents(ent1, &.{.pos, .vel});
     comps.pos.x += 1;
@@ -49,6 +48,8 @@ test "sparse set pool" {
     
     try testing.expect(comps.pos.x == 2);
     try testing.expect(comps.vel.yvel == 3);
+    
+    try sparse_set_pool.deleteEnt(ent2);
 }
 
 test "archetype pool" {

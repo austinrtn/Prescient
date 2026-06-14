@@ -26,6 +26,7 @@ pub fn PoolInterface(comptime pool_config: PR.Config) type {
         }
 
         pub fn createEnt(self: *Self, ent: anytype) !EntityId {
+            // Get entity's slot, convert the ent anytype fields into specified component types
             var slot = self.id_manager.getNextSlot();
             inline for(std.meta.fields(@TypeOf(ent))) |field| validateComponent(CR.getEnumByName(field.name));
             const converted_ent = CR.AnomToTypedComponentStruct(ent);
@@ -48,6 +49,7 @@ pub fn PoolInterface(comptime pool_config: PR.Config) type {
                 swapped_ent.member_index = slot.member_index;
                 try self.id_manager.setSlot(swapped_ent);
             }
+            try self.id_manager.sendSlotToQueue(entity_id);
         }
 
         pub fn getComponent(self: *Self, entity_id: EntityId, comptime component: Component) CR.getCompTypeByEnum(component) {
@@ -65,6 +67,13 @@ pub fn PoolInterface(comptime pool_config: PR.Config) type {
             return comp_build;
         }
 
+        pub fn setComponent(self: *Self, entity_id: EntityId, comptime component: Component, component_value: anytype) void {
+            const slot = self.id_manager.getSlot(entity_id);
+            const converted_comp_data = CR.convertAnomToComponent(component_value, @tagName(component));
+            
+            self.ent_pool.setComponent(component, converted_comp_data, slot.group_index, slot.member_index);
+        }
+
         pub fn setComponents(self: *Self, entity_id: EntityId, component_values: anytype) void {
             const slot = self.id_manager.getSlot(entity_id);
 
@@ -74,13 +83,6 @@ pub fn PoolInterface(comptime pool_config: PR.Config) type {
                 const comp_value = CR.convertAnomToComponent(comp_val, field.name);
                 self.ent_pool.setComponent(comp_tag, comp_value, slot.group_index, slot.member_index);
             }
-        }
-
-        pub fn setComponent(self: *Self, entity_id: EntityId, comptime component: Component, component_value: anytype) void {
-            const slot = self.id_manager.getSlot(entity_id);
-            const converted_comp_data = CR.convertAnomToComponent(component_value, @tagName(component));
-            
-            self.ent_pool.setComponent(component, converted_comp_data, slot.group_index, slot.member_index);
         }
 
         pub fn addComponent(self: *Self, entity_id: EntityId, comptime component: Component, component_value: anytype) !void {
