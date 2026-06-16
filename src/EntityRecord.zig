@@ -25,6 +25,7 @@ pub fn EntityRecord(comptime components: []const Component) type {
         record_index: RecordIndex, 
         inner_record: InnerEntRecord = undefined,
 
+        /// Init a new EntityRecord struct with each component index being set to null
         pub fn init(record_data: RecordData) Self {
             var self: Self = .{
                 .entity_id = record_data.entity_id,

@@ -150,7 +150,7 @@ pub fn ComponentRegistryT(comptime comp_descs: []const ComponentDesc) type {
             );
         }
 
-        fn MaskToPartialComponentStruct(components: []const Enum) type {
+        fn MaskToPartialComponentStruct(comptime components: []const Enum) type {
             var names: [components.len][]const u8 = undefined;
             var types: [components.len]type = undefined;
             var attrs: [components.len]std.builtin.Type.StructField.Attributes = undefined;
@@ -170,6 +170,7 @@ pub fn ComponentRegistryT(comptime comp_descs: []const ComponentDesc) type {
                 &attrs,
             );
         }
+        
         pub fn initMaskToPartialComponentStruct(comptime components: []const Enum) MaskToPartialComponentStruct(components) {
             var build: MaskToPartialComponentStruct(components) = undefined;
 
