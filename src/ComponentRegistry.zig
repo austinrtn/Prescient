@@ -180,6 +180,16 @@ pub fn ComponentRegistryT(comptime comp_descs: []const ComponentDesc) type {
 
             return build;
         }
+        
+        pub fn localizeComponent(comptime component: Enum, comptime Pool: type) Pool.PoolComponent {
+            return std.meta.stringToEnum(Pool.PoolComponent, @tagName(component)) orelse 
+            @compileError("Component " ++ @tagName(component) ++ " does not exist within pool scope!");
+        }
+        
+        pub fn globalizeComponent(comptime pool_component: anytype) Enum {
+            return std.meta.stringToEnum(Enum, @tagName(pool_component)) orelse 
+            @compileError("Component " ++ @tagName(pool_component) ++ " does not exist within component registry!");
+        }
     };
 }
 

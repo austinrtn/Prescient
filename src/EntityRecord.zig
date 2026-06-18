@@ -1,6 +1,5 @@
 const std = @import("std");
 const CR = @import("ComponentRegistry.zig").ComponentRegistry;
-const Component = CR.Enum;
 const Registry = @import("Registry.zig").Registry;
 const EntityId = Registry.EntityId;
 const GroupIndex = Registry.GroupIndex;
@@ -8,8 +7,8 @@ const MemberIndex = Registry.MemberIndex;
 const RecordIndex = Registry.RecordIndex;
 const ComponentIndex = Registry.ComponentIndex;
 
-pub fn EntityRecord(comptime components: []const Component) type {
-    const InnerEntRecord = InnerEntityRecord(components);
+pub fn EntityRecord(comptime ComponentEnum: type) type {
+    const InnerEntRecord = InnerEntityRecord(ComponentEnum);
     return struct {
         pub const RecordData = struct {
             entity_id: EntityId,
@@ -35,21 +34,23 @@ pub fn EntityRecord(comptime components: []const Component) type {
                 .inner_record = undefined,
             };
             
-            inline for(components) |comp| @field(self.inner_record, @tagName(comp)) = null;
+            inline for(comptime std.meta.tags(ComponentEnum)) |comp| @field(self.inner_record, @tagName(comp)) = null;
             return self;
         }
 
-        pub fn setComponentIndex(self: *Self, comptime component: Component, component_index: anytype) void {
+        pub fn setComponentIndex(self: *Self, comptime component: ComponentEnum, component_index: anytype) void {
             @field(self.inner_record, @tagName(component)) = ComponentIndex.init(component_index);
         }
 
-        pub fn getComponentIndex(self: Self, comptime component: Component) ?ComponentIndex {
+        pub fn getComponentIndex(self: Self, comptime component: ComponentEnum) ?ComponentIndex {
             return @field(self.inner_record, @tagName(component));
         }
     };
 }
 
-fn InnerEntityRecord(comptime components: []const Component) type {
+fn InnerEntityRecord(comptime ComponentEnumType: type) type {
+    const components = std.meta.tags(ComponentEnumType);
+    
     var names: [components.len + 4][]const u8 = undefined;
     var types: [components.len + 4]type = undefined;
     var attrs: [components.len + 4]std.builtin.Type.StructField.Attributes = undefined;

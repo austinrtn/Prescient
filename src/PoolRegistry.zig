@@ -46,14 +46,10 @@ fn PoolRegistryT(comptime pool_configs: []const PoolConfig) type {
             );
         }
 
-        pub fn localizeComponent(comptime component: Component, comptime Pool: type) Pool.PoolComponent {
-            return std.meta.stringToEnum(Pool.PoolComponent, @tagName(component)) orelse 
-            @compileError("Component " ++ @tagName(component) ++ " does not exist within pool scope!");
-        }
-        
-        pub fn globalizeComponent(pool_component: anytype) Component {
-            return std.meta.stringToEnum(Component, @tagName(pool_component)) orelse 
-            @compileError("Component " ++ @tagName(pool_component) ++ " does not exist within component registry!");
+        pub fn GetPoolComponentEnum(comptime pool: Enum) type {
+            const config = comptime getConfigByEnum(pool);
+            const subset = CreateComponentSubset(config.components);
+            return subset;
         }
     };
 }

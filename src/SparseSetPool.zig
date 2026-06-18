@@ -13,6 +13,7 @@ const RecordIndex = Registry.RecordIndex;
 const ComponentIndex = Registry.ComponentIndex;
 const EntityRecordNS = @import("EntityRecord.zig");
 const EntityRecordType = EntityRecordNS.EntityRecord;
+const Global = CR.globalizeComponent;
 
 fn ComponentWithOwner(comptime ComponentType: type) type { 
     return struct {
@@ -45,10 +46,12 @@ fn SparseSetStorage(comptime components: []const Component) type {
 
 pub fn SparseSetPool(comptime config: PR.Config) type {
     const pool_comps = config.components;
+    const TAG = std.meta.stringToEnum(PR.Enum, config.name) orelse unreachable;
+    const PoolCompoenentEnum = PR.GetPoolComponentEnum(TAG);
+    
     const Storage = SparseSetStorage(config.components);
     const StorageFields = std.meta.fields(Storage);
-    const EntityRecord = EntityRecordType(config.components);
-    const TAG = std.meta.stringToEnum(PR.Enum, config.name) orelse unreachable;
+    const EntityRecord = EntityRecordType(PoolCompoenentEnum);
     const AppendData = struct { group_index: GroupIndex, member_index: MemberIndex };
     const GroupEntry = struct { group_index: GroupIndex, group: *ArrayList(RecordIndex) };
 
@@ -56,7 +59,7 @@ pub fn SparseSetPool(comptime config: PR.Config) type {
         const Self = @This();
         pub const tag = TAG;
         pub const pool_mask = getBitmask(pool_comps);
-        pub const PoolComponent = PR.CreateComponentSubset(pool_comps);
+        pub const PoolComponent = PoolCompoenentEnum;
 
         allocator: std.mem.Allocator,
         groups: HashMap(CR.BitSet, GroupEntry) = .empty,
@@ -103,7 +106,7 @@ pub fn SparseSetPool(comptime config: PR.Config) type {
             });
 
             inline for (std.meta.fields(EntType)) |field| {
-                const comp_tag = comptime CR.getEnumByName(field.name);
+                const comp_tag = comptime std.meta.stringToEnum(PoolComponent, field.name) orelse unreachable;
                 const ent_field = @field(ent, field.name);
                 const comp_converted = CR.convertAnomToComponent(ent_field, field.name);
                 const comp_store = &@field(self.comp_storage, field.name);
@@ -160,7 +163,7 @@ pub fn SparseSetPool(comptime config: PR.Config) type {
             return swapped_ent_id; 
         }
 
-        pub fn getComponent(self: *Self, comptime component: Component, group_index: GroupIndex, member_index: MemberIndex) CR.getCompTypeByEnum(component) {
+        pub fn getComponent(self: *Self, comptime component: PoolComponent, group_index: GroupIndex, member_index: MemberIndex) CR.getCompTypeByEnum(Global(component)) {
             const group = self.groups.values()[group_index.idx()].group;
 
             const record_idx = group.items[member_index.idx()];
@@ -171,7 +174,7 @@ pub fn SparseSetPool(comptime config: PR.Config) type {
             return comp_array.items[comp_idx.idx()].value;
         }
 
-        pub fn setComponent(self: *Self, comptime component: Component, component_value: CR.getCompTypeByEnum(component), group_index: GroupIndex, member_index: MemberIndex) void {
+        pub fn setComponent(self: *Self, comptime component: PoolComponent, component_value: CR.getCompTypeByEnum(Global(component)), group_index: GroupIndex, member_index: MemberIndex) void {
             const comp_name = @tagName(component);
             const group = self.groups.values()[group_index.idx()].group;
 
@@ -189,7 +192,7 @@ pub fn SparseSetPool(comptime config: PR.Config) type {
             swapped_member_index: ?MemberIndex,
         };
 
-       pub fn addComponent(self: *Self, comptime component: Component, component_value: CR.getCompTypeByEnum(component), entity_id: EntityId, group_index: GroupIndex, member_index: MemberIndex,) !AddComponentReturnType {
+       pub fn addComponent(self: *Self, comptime component: PoolComponent, component_value: CR.getCompTypeByEnum(Global(component)), entity_id: EntityId, group_index: GroupIndex, member_index: MemberIndex,) !AddComponentReturnType {
             _ = entity_id; // Uneeded for SparseSetPool.addFunction but entity_id parameter is kept to keep api uniform with ArchetypePool.zig
             const old_mask = self.groups.keys()[group_index.idx()];
             const group = self.groups.values()[group_index.idx()].group;
@@ -203,7 +206,7 @@ pub fn SparseSetPool(comptime config: PR.Config) type {
 
             const comp_store = &@field(self.comp_storage, @tagName(component));
 
-            const new_mask = CR.addComponentBit(component, old_mask);
+            const new_mask = CR.addComponentBit(Global(component), old_mask);
             const new_group = try self.getOrCreateArchetype(new_mask);
 
             const new_member_idx: MemberIndex = .init(new_group.group.items.len);
