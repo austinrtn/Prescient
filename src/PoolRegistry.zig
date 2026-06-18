@@ -2,6 +2,7 @@ const std = @import("std");
 const Pools = @import("Registry.zig").Registry.PoolConfigs;
 const EntPool = @import("EntPool.zig").EntPool;
 const CR = @import("ComponentRegistry.zig").ComponentRegistry;
+const Component = CR.Enum;
 
 pub const PoolConfig = struct {
     name: []const u8,
@@ -26,6 +27,33 @@ fn PoolRegistryT(comptime pool_configs: []const PoolConfig) type {
 
         pub fn getEnumByName(comptime name: []const u8) Enum {
             return std.meta.stringToEnum(Enum, name) orelse unreachable;
+        }
+        
+        pub fn CreateComponentSubset(comptime components: []const Component) type {
+            var names: [components.len][]const u8 = undefined;
+            var vals:[components.len]u8 = undefined;
+        
+            for(components, 0..) |comp, i| {
+                names[i] = @tagName(comp);
+                vals[i] = @intFromEnum(comp);
+            }
+        
+            return @Enum(
+                u8,
+                .exhaustive,
+                &names,
+                &vals,
+            );
+        }
+
+        pub fn localizeComponent(comptime component: Component, comptime Pool: type) Pool.PoolComponent {
+            return std.meta.stringToEnum(Pool.PoolComponent, @tagName(component)) orelse 
+            @compileError("Component " ++ @tagName(component) ++ " does not exist within pool scope!");
+        }
+        
+        pub fn globalizeComponent(pool_component: anytype) Component {
+            return std.meta.stringToEnum(Component, @tagName(pool_component)) orelse 
+            @compileError("Component " ++ @tagName(pool_component) ++ " does not exist within component registry!");
         }
     };
 }
@@ -77,3 +105,4 @@ fn stringTypeMap(comptime pool_configs: []const PoolConfig) std.StaticStringMap(
 
     return std.StaticStringMap(PoolConfig).initComptime(values);
 }
+

@@ -13,7 +13,8 @@ pub fn PoolInterface(comptime pool_config: PR.Config) type {
 
     return struct {
         const Self = @This();
-        const PoolTag = PR.getEnumByName(pool_config.name);
+        pub const PoolComponent = EntPool.PoolComponent;
+        pub const PoolTag = PR.getEnumByName(pool_config.name);
 
         ent_pool: *EntPool,
         id_manager: *IdManager,

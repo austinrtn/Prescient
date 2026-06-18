@@ -19,6 +19,9 @@ test "sparse set pool" {
     defer prescient.deinit();
 
     var sparse_set_pool = prescient.getPool(.sparse_set);
+    inline for(std.meta.tags(@TypeOf(sparse_set_pool).PoolComponent)) |comp| {
+        std.debug.print("{s}\n", .{@tagName(comp)});
+    }
     const ent1 = try sparse_set_pool.createEnt(.{ .pos = .{ .x = 1, .y = 1 }, .vel = .{ .xvel = 2, .yvel = 2 }});
 
     const pos = sparse_set_pool.getComponent(ent1, .pos);
@@ -64,7 +67,7 @@ test "archetype pool" {
     try testing.expect(pos.x == 1 and pos.y == 1);
     try testing.expect(vel.xvel == 2 and vel.yvel == 2);
 
-    const ent2 = try prescient.ent.create(.sparse_set, .{ .pos = .{ .x = -1, .y = -1 }, .vel = .{ .xvel = -2, .yvel = -2 } });
+    const ent2 = try prescient.ent.create(.archetype, .{ .pos = .{ .x = -1, .y = -1 }, .vel = .{ .xvel = -2, .yvel = -2 } });
 
     const pos2 = prescient.ent.getComponent(ent2, .pos);
     const vel2 = prescient.ent.getComponent(ent2, .vel);

@@ -56,6 +56,7 @@ pub fn SparseSetPool(comptime config: PR.Config) type {
         const Self = @This();
         pub const tag = TAG;
         pub const pool_mask = getBitmask(pool_comps);
+        pub const PoolComponent = PR.CreateComponentSubset(pool_comps);
 
         allocator: std.mem.Allocator,
         groups: HashMap(CR.BitSet, GroupEntry) = .empty,

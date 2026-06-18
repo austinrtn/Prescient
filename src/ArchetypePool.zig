@@ -20,13 +20,12 @@ pub fn ArchetypePool(comptime config: Config) type {
     const GroupEntry = struct { group_index: GroupIndex, group: *ARCHETYPE };
     const AppendData = struct { group_index: GroupIndex, member_index: MemberIndex };
     
-    const AddComponentReturnType = struct {
+    const AddComponentResult = struct {
         new_group_index: GroupIndex,
         new_member_index: MemberIndex,
         swapped_entity_id: ?EntityId,
         swapped_member_index: ?MemberIndex,
     };
-    
 
     return struct {
         const Self = @This();
@@ -75,7 +74,7 @@ pub fn ArchetypePool(comptime config: Config) type {
         }
         
         pub fn addComponent(self: *Self, comptime component: Component, component_value: CR.getCompTypeByEnum(component), 
-            entity_id: EntityId, group_index: GroupIndex, member_index: MemberIndex,) !AddComponentReturnType{
+            entity_id: EntityId, group_index: GroupIndex, member_index: MemberIndex,) !AddComponentResult{
                 const old_mask = self.groups.keys()[group_index.idx()];
                 const new_mask = CR.addComponentBit(component, old_mask);
                 

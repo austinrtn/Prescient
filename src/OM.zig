@@ -20,11 +20,11 @@ const Operation = enum {
 };
 
 const PendingOperation = struct {
-    component: Component, 
-    operation: Operation, 
-    component_index: ?ComponentIndex = null,
+    operation: Operation,
+    record_index: RecordIndex,
+    src_bitmask: CR.BitSet,
+    dest_bitmask: CR.BitSet,
 };
-
 
 pub fn OperationManager(comptime components: []const Component) type {
     const Storage = ComponentStorage(components);
@@ -37,54 +37,55 @@ pub fn OperationManager(comptime components: []const Component) type {
         
         entity_records: ArrayList(EntityRecord) = .empty,
         pending_operations: HashMap = .empty,
-        pending_components: Storage = undefined,
+        
+        storage: Storage = undefined,
 
         pub fn init(allocator: std.mem.Allocator) Self {
             return .{
                 .allocator = allocator,
-                .pending_components = .init(allocator),
+                .storage = .init(allocator),
             };
         }
 
         pub fn deinit(self: *Self) void {
-            self.pending_components.deinit();
+            self.storage.deinit();
             self.entity_records.deinit(self.allocator);
             for(self.pending_operations.values()) |*list| list.deinit(self.allocator);
             self.pending_operations.deinit(self.allocator);
         }
 
-        // pub fn addOperation(self: *Self, comptime operation: Operation, component_data: anytype, record_data: EntityRecord.RecordData) !void {
-        //     const ent_id = record_data.entity_id;
-        //     var ent_record: EntityRecord = .init(record_data);
+        pub fn addOperation(self: *Self, comptime operation: Operation, component_data: anytype, record_data: EntityRecord.RecordData) !void {
+            const ent_id = record_data.entity_id;
+            var ent_record: EntityRecord = .init(record_data);
 
-        //     // If not adding an ent for creation,
-        //     if (comptime operation != .addEnt) {
-        //         const res = try self.entity_records.getOrPut(self.allocator, record_data.entity_id);
-        //         if (res.found_existing) ent_record = res.value_ptr.entity_record;
-        //     }
+            // If not adding an ent for creation,
+            if (comptime operation != .addEnt) {
+                const res = try self.entity_records.getOrPut(self.allocator, record_data.entity_id);
+                if (res.found_existing) ent_record = res.value_ptr.entity_record;
+            }
 
-        //     switch (operation) {
-        //         .addEnt => {
-        //             if (comptime MODE == .Debug or MODE == .ReleaseSafe) {
-        //                 const found_ent = self.entity_records.get(record_data.entity_id);
-        //                 if (operation == .addEnt and found_ent != null) {
-        //                     std.debug.panic("Duplicate create entity operation found for EntityId {}\n", .{ent_id});
-        //                 }
-        //             }
+            switch (operation) {
+                .addEnt => {
+                    if (comptime MODE == .Debug or MODE == .ReleaseSafe) {
+                        const found_ent = self.entity_records.get(record_data.entity_id);
+                        if (operation == .addEnt and found_ent != null) {
+                            std.debug.panic("Duplicate create entity operation found for EntityId {}\n", .{ent_id});
+                        }
+                    }
 
-        //             self.appendAddOperation(.addEnt, &ent_record, component_data);
-        //             const record_operation: RecordOperation = .{ .entity_record = record_data.entity_id, .operation = operation };
-        //             try self.entity_records.putNoClobber(self.allocator, ent_id, record_operation);
-        //         },
-        //         .addComp => {
-        //             self.appendAddOperation(.addEnt, &ent_record, component_data);
-        //             const record_operation: RecordOperation = .{ .entity_record = record_data.entity_id, .operation = operation };
-        //             try self.entity_records.put(self.allocator, ent_id, record_operation);
-        //         },
-        //         // .deleteEnt => self.appendRemoveOperation(&ent_record),
-        //         // // .removeComp => ,
-        //     }
-        // }
+                    self.appendAddOperation(.addEnt, &ent_record, component_data);
+                    const record_operation: RecordOperation = .{ .entity_record = record_data.entity_id, .operation = operation };
+                    try self.entity_records.putNoClobber(self.allocator, ent_id, record_operation);
+                },
+                .addComp => {
+                    self.appendAddOperation(.addEnt, &ent_record, component_data);
+                    const record_operation: RecordOperation = .{ .entity_record = record_data.entity_id, .operation = operation };
+                    try self.entity_records.put(self.allocator, ent_id, record_operation);
+                },
+                // .deleteEnt => self.appendRemoveOperation(&ent_record),
+                // // .removeComp => ,
+            }
+        }
 
         fn appendAddOperation(self: *Self, comptime operation: Operation, entity_record: *EntityRecord, component_data: anytype) !void {
             if (operation != .addEnt or operation != .addComp)
@@ -93,7 +94,7 @@ pub fn OperationManager(comptime components: []const Component) type {
             inline for (std.meta.fields(@TypeOf(component_data))) |field| {
                 const comp_tag = comptime CR.getEnumByName(field.name);
                 const comp_value = @field(component_data, field.name);
-                const comp_list = self.pending_components.getComponentArray(comp_tag);
+                const comp_list = self.storage.getComponentArray(comp_tag);
                 try comp_list.append(self.allocator, comp_value);
                 entity_record.setComponentIndex(comp_tag, comp_list.items.len - 1);
             }
