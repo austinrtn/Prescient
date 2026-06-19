@@ -7,6 +7,7 @@ const Component = CR.Enum;
 const getBitmask = CR.getBitmaskOfComponents;
 
 const ArchetypeStorageT = @import("ArchetypeStorage.zig").Archetype;
+const PoolComponentT = @import("ComponentSubset.zig").ComponentSubset;
 const Config = @import("PoolRegistry.zig").PoolConfig;
 const Registry = @import("Registry.zig").Registry;
 const EntityId = Registry.EntityId;
@@ -15,11 +16,12 @@ const MemberIndex = Registry.MemberIndex;
 
 pub fn ArchetypePool(comptime config: Config) type {
     const pool_comps = config.components;
-    const ARCHETYPE = ArchetypeStorageT(pool_comps);
     const TAG = std.meta.stringToEnum(PR.Enum, config.name) orelse unreachable;
+    const PoolComponentType = PoolComponentT(TAG);
+    const ARCHETYPE = ArchetypeStorageT(PoolComponentType);
     const GroupEntry = struct { group_index: GroupIndex, group: *ARCHETYPE };
     const AppendData = struct { group_index: GroupIndex, member_index: MemberIndex };
-    
+
     const AddComponentResult = struct {
         new_group_index: GroupIndex,
         new_member_index: MemberIndex,
@@ -29,6 +31,7 @@ pub fn ArchetypePool(comptime config: Config) type {
 
     return struct {
         const Self = @This();
+        pub const PoolComponent = PoolComponentType;
         pub const Archetype = ARCHETYPE;
         pub const tag = TAG;
         pub const pool_mask = getBitmask(pool_comps);
@@ -63,47 +66,47 @@ pub fn ArchetypePool(comptime config: Config) type {
             return group.remove(member_index);
         }
 
-        pub fn getComponent(self: *Self, comptime component: Component, group_index: GroupIndex, member_index: MemberIndex) CR.getCompTypeByEnum(component) {
+        pub fn getComponent(self: *Self, comptime component: PoolComponent.Enum, group_index: GroupIndex, member_index: MemberIndex) CR.getCompTypeByEnum(PoolComponent.globalize(component)) {
             const group = self.getGroupByIndex(group_index).group;
             return group.getComponent(component, member_index);
         }
 
-        pub fn setComponent(self: *Self, comptime component: Component, component_value: CR.getCompTypeByEnum(component), group_index: GroupIndex, member_index: MemberIndex) void {
+        pub fn setComponent(self: *Self, comptime component: PoolComponent.Enum, component_value: CR.getCompTypeByEnum(PoolComponent.globalize(component)), group_index: GroupIndex, member_index: MemberIndex) void {
             const group = self.getGroupByIndex(group_index).group;
             group.setComponent(component, component_value, member_index);
         }
-        
-        pub fn addComponent(self: *Self, comptime component: Component, component_value: CR.getCompTypeByEnum(component), 
-            entity_id: EntityId, group_index: GroupIndex, member_index: MemberIndex,) !AddComponentResult{
-                const old_mask = self.groups.keys()[group_index.idx()];
-                const new_mask = CR.addComponentBit(component, old_mask);
-                
-                const group = self.getGroupByIndex(group_index).group;
-                
-                // var comp_buf: [pool_comps.len] Component = undefined;
-                // const mask_comps = CR.getComponentsFromMask(new_mask, &comp_buf);
-                
-                var comp_value = CR.initMaskToPartialComponentStruct(pool_comps);
-                inline for(pool_comps) |comp| {
-                    if(CR.maskContainsComponent(comp, new_mask)) {
-                        const field = &@field(comp_value, @tagName(comp));
-                        if(component != comp) {
-                            field.* = self.getComponent(comp, group_index, member_index);
-                        }
-                        else field.* = component_value;
-                    }
+
+        pub fn addComponent(
+            self: *Self,
+            comptime component: PoolComponent.Enum,
+            component_value: CR.getCompTypeByEnum(PoolComponent.globalize(component)),
+            entity_id: EntityId,
+            group_index: GroupIndex,
+            member_index: MemberIndex,
+        ) !AddComponentResult {
+            const old_mask = self.groups.keys()[group_index.idx()];
+            const new_mask = CR.addComponentBit(PoolComponent.globalize(component), old_mask);
+
+            const group = self.getGroupByIndex(group_index).group;
+
+            // var comp_buf: [pool_comps.len] Component = undefined;
+            // const mask_comps = CR.getComponentsFromMask(new_mask, &comp_buf);
+
+            var comp_value = CR.initMaskToPartialComponentStruct(pool_comps);
+            inline for (comptime PoolComponent.Tags) |comp| {
+                if (CR.maskContainsComponent(PoolComponent.globalize(comp), new_mask)) {
+                    const field = &@field(comp_value, @tagName(comp));
+                    if (component != comp) {
+                        field.* = self.getComponent(comp, group_index, member_index);
+                    } else field.* = component_value;
                 }
+            }
 
-                const append_res = try self.addEnt(comp_value, entity_id);
+            const append_res = try self.addEnt(comp_value, entity_id);
 
-                const swapped_ent_id = group.remove(member_index);
+            const swapped_ent_id = group.remove(member_index);
 
-                return .{
-                    .new_group_index = append_res.group_index,
-                    .new_member_index = append_res.member_index,
-                    .swapped_entity_id = swapped_ent_id,
-                    .swapped_member_index = member_index
-                };
+            return .{ .new_group_index = append_res.group_index, .new_member_index = append_res.member_index, .swapped_entity_id = swapped_ent_id, .swapped_member_index = member_index };
         }
 
         pub fn getArchetypesContainingBitset(self: Self, mask: CR.BitSet) ![]CR.BitSet {

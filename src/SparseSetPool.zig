@@ -13,9 +13,9 @@ const RecordIndex = Registry.RecordIndex;
 const ComponentIndex = Registry.ComponentIndex;
 const EntityRecordNS = @import("EntityRecord.zig");
 const EntityRecordType = EntityRecordNS.EntityRecord;
-const Global = CR.globalizeComponent;
+const PoolComponentT = @import("ComponentSubset.zig").ComponentSubset;
 
-fn ComponentWithOwner(comptime ComponentType: type) type { 
+fn ComponentWithOwner(comptime ComponentType: type) type {
     return struct {
         value: ComponentType,
         record_index: RecordIndex,
@@ -47,19 +47,19 @@ fn SparseSetStorage(comptime components: []const Component) type {
 pub fn SparseSetPool(comptime config: PR.Config) type {
     const pool_comps = config.components;
     const TAG = std.meta.stringToEnum(PR.Enum, config.name) orelse unreachable;
-    const PoolCompoenentEnum = PR.GetPoolComponentEnum(TAG);
-    
+
     const Storage = SparseSetStorage(config.components);
     const StorageFields = std.meta.fields(Storage);
-    const EntityRecord = EntityRecordType(PoolCompoenentEnum);
     const AppendData = struct { group_index: GroupIndex, member_index: MemberIndex };
     const GroupEntry = struct { group_index: GroupIndex, group: *ArrayList(RecordIndex) };
 
     return struct {
         const Self = @This();
+        pub const PoolComponent = PoolComponentT(TAG);
+        const EntityRecord = EntityRecordType(PoolComponent.Enum);
+
         pub const tag = TAG;
         pub const pool_mask = getBitmask(pool_comps);
-        pub const PoolComponent = PoolCompoenentEnum;
 
         allocator: std.mem.Allocator,
         groups: HashMap(CR.BitSet, GroupEntry) = .empty,
@@ -106,11 +106,11 @@ pub fn SparseSetPool(comptime config: PR.Config) type {
             });
 
             inline for (std.meta.fields(EntType)) |field| {
-                const comp_tag = comptime std.meta.stringToEnum(PoolComponent, field.name) orelse unreachable;
+                const comp_tag = comptime std.meta.stringToEnum(PoolComponent.Enum, field.name) orelse unreachable;
                 const ent_field = @field(ent, field.name);
                 const comp_converted = CR.convertAnomToComponent(ent_field, field.name);
                 const comp_store = &@field(self.comp_storage, field.name);
-                try comp_store.append(self.allocator, .{ .value = comp_converted, .record_index = record_idx});
+                try comp_store.append(self.allocator, .{ .value = comp_converted, .record_index = record_idx });
 
                 ent_record.setComponentIndex(comp_tag, comp_store.items.len - 1);
             }
@@ -129,16 +129,15 @@ pub fn SparseSetPool(comptime config: PR.Config) type {
             const record_idx = group.items[member_index.idx()];
             const ent_record = &self.entity_records.items[record_idx.idx()];
 
-            inline for(pool_comps) |comp| {
+            inline for (comptime PoolComponent.Tags) |comp| {
                 const field_name = @tagName(comp);
-                // Need to get actual record struct here v
                 const component_index = ent_record.getComponentIndex(comp);
                 const comp_array = &@field(self.comp_storage, field_name);
 
-                if(component_index) |comp_index| {
+                if (component_index) |comp_index| {
                     const last_comp_index = comp_array.items.len - 1;
                     const swapped_comp = comp_index.idx() != last_comp_index;
-                    if(swapped_comp) {
+                    if (swapped_comp) {
                         const comp_with_owner = comp_array.items[last_comp_index];
                         const record_of_swapped_ent = &self.entity_records.items[comp_with_owner.record_index.idx()];
                         record_of_swapped_ent.setComponentIndex(comp, comp_index.val);
@@ -149,21 +148,20 @@ pub fn SparseSetPool(comptime config: PR.Config) type {
 
             const swapped_ent_id = blk: {
                 const last_idx = group.items.len - 1;
-                if(last_idx != member_index.idx()) {
-                    const swapped_record_idx =  group.items[last_idx];
+                if (last_idx != member_index.idx()) {
+                    const swapped_record_idx = group.items[last_idx];
                     const swapped_ent_record = &self.entity_records.items[swapped_record_idx.idx()];
                     swapped_ent_record.member_index = member_index;
                     break :blk swapped_ent_record.entity_id;
-                }
-                else break :blk null;
+                } else break :blk null;
             };
-            
+
             _ = group.swapRemove(member_index.idx());
             self.count -= 1;
-            return swapped_ent_id; 
+            return swapped_ent_id;
         }
 
-        pub fn getComponent(self: *Self, comptime component: PoolComponent, group_index: GroupIndex, member_index: MemberIndex) CR.getCompTypeByEnum(Global(component)) {
+        pub fn getComponent(self: *Self, comptime component: PoolComponent.Enum, group_index: GroupIndex, member_index: MemberIndex) CR.getCompTypeByEnum(PoolComponent.globalize(component)) {
             const group = self.groups.values()[group_index.idx()].group;
 
             const record_idx = group.items[member_index.idx()];
@@ -174,7 +172,7 @@ pub fn SparseSetPool(comptime config: PR.Config) type {
             return comp_array.items[comp_idx.idx()].value;
         }
 
-        pub fn setComponent(self: *Self, comptime component: PoolComponent, component_value: CR.getCompTypeByEnum(Global(component)), group_index: GroupIndex, member_index: MemberIndex) void {
+        pub fn setComponent(self: *Self, comptime component: PoolComponent.Enum, component_value: CR.getCompTypeByEnum(PoolComponent.globalize(component)), group_index: GroupIndex, member_index: MemberIndex) void {
             const comp_name = @tagName(component);
             const group = self.groups.values()[group_index.idx()].group;
 
@@ -192,7 +190,14 @@ pub fn SparseSetPool(comptime config: PR.Config) type {
             swapped_member_index: ?MemberIndex,
         };
 
-       pub fn addComponent(self: *Self, comptime component: PoolComponent, component_value: CR.getCompTypeByEnum(Global(component)), entity_id: EntityId, group_index: GroupIndex, member_index: MemberIndex,) !AddComponentReturnType {
+        pub fn addComponent(
+            self: *Self,
+            comptime component: PoolComponent.Enum,
+            component_value: CR.getCompTypeByEnum(PoolComponent.globalize(component)),
+            entity_id: EntityId,
+            group_index: GroupIndex,
+            member_index: MemberIndex,
+        ) !AddComponentReturnType {
             _ = entity_id; // Uneeded for SparseSetPool.addFunction but entity_id parameter is kept to keep api uniform with ArchetypePool.zig
             const old_mask = self.groups.keys()[group_index.idx()];
             const group = self.groups.values()[group_index.idx()].group;
@@ -206,11 +211,11 @@ pub fn SparseSetPool(comptime config: PR.Config) type {
 
             const comp_store = &@field(self.comp_storage, @tagName(component));
 
-            const new_mask = CR.addComponentBit(Global(component), old_mask);
+            const new_mask = CR.addComponentBit(PoolComponent.globalize(component), old_mask);
             const new_group = try self.getOrCreateArchetype(new_mask);
 
             const new_member_idx: MemberIndex = .init(new_group.group.items.len);
-            try comp_store.append(self.allocator, .{ .value = component_value, .record_index = entity_record.record_index});
+            try comp_store.append(self.allocator, .{ .value = component_value, .record_index = entity_record.record_index });
 
             try new_group.group.append(self.allocator, record_idx);
             entity_record.setComponentIndex(component, comp_store.items.len - 1);
@@ -269,7 +274,7 @@ pub fn SparseSetPool(comptime config: PR.Config) type {
 
                     std.debug.print("member {d} (id {d}): ", .{ member_idx, entity_id });
 
-                    inline for (pool_comps, 0..) |component, i| {
+                    inline for (comptime PoolComponent.Tags, 0..) |component, i| {
                         if (i > 0) std.debug.print(" | ", .{});
 
                         const comp_name = @tagName(component);

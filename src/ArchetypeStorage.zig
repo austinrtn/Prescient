@@ -7,15 +7,23 @@ const Registry = @import("Registry.zig").Registry;
 const EntityId = Registry.EntityId;
 const MemberIndex = Registry.MemberIndex;
 
-pub fn Archetype(comptime components: []const Component) type {
-    const Storage = ComponentStorage(components);
-    const EntTypeSlices = CR.GetTypeOfComponents(components, true);
-    const bit_mask = CR.getBitmaskOfComponents(components);
+pub fn Archetype(comptime PoolComponent: type) type {
+    const global_components = blk: {
+        var components: [PoolComponent.Tags.len]Component = undefined;
+        for (PoolComponent.Tags, 0..) |component, i| {
+            components[i] = PoolComponent.globalize(component);
+        }
+        break :blk components;
+    };
+
+    const Storage = ComponentStorage(&global_components);
+    const EntTypeSlices = CR.GetTypeOfComponents(&global_components, true);
+    const bit_mask = CR.getBitmaskOfComponents(&global_components);
 
     return struct {
         const Self = @This();
 
-        pub const Components = components;
+        pub const Components = PoolComponent.Tags;
         pub const mask = bit_mask;
         allocator: std.mem.Allocator,
         entity_ids: ArrayList(EntityId) = .empty,
@@ -40,7 +48,7 @@ pub fn Archetype(comptime components: []const Component) type {
             const EntType = @TypeOf(ent);
             try self.entity_ids.append(self.allocator, entity_id);
 
-            inline for (components) |comp| {
+            inline for (comptime PoolComponent.Tags) |comp| {
                 const field_name = @tagName(comp);
                 if (@hasField(EntType, field_name)) {
                     const comp_value = @field(ent, field_name);
@@ -72,7 +80,7 @@ pub fn Archetype(comptime components: []const Component) type {
 
             _ = self.entity_ids.swapRemove(member_idx);
             _ = self.member_indices.swapRemove(member_idx);
-            inline for (components) |component| {
+            inline for (comptime PoolComponent.Tags) |component| {
                 const comp_list = &@field(self.comp_storage.inner_storage, @tagName(component));
                 if (comp_list.items.len > 0) _ = comp_list.swapRemove(member_idx);
             }
@@ -81,12 +89,12 @@ pub fn Archetype(comptime components: []const Component) type {
             return swapped_ent_id;
         }
 
-        pub fn getComponent(self: *Self, comptime component: Component, member_index: MemberIndex) CR.getCompTypeByEnum(component) {
+        pub fn getComponent(self: *Self, comptime component: PoolComponent.Enum, member_index: MemberIndex) CR.getCompTypeByEnum(PoolComponent.globalize(component)) {
             const comp_array = &@field(self.comp_storage.inner_storage, @tagName(component));
             return comp_array.items[member_index.idx()];
         }
 
-        pub fn setComponent(self: *Self, comptime component: Component, component_data: CR.getCompTypeByEnum(component), member_index: MemberIndex) void {
+        pub fn setComponent(self: *Self, comptime component: PoolComponent.Enum, component_data: CR.getCompTypeByEnum(PoolComponent.globalize(component)), member_index: MemberIndex) void {
             const comp_array = &@field(self.comp_storage.inner_storage, @tagName(component));
             comp_array.items[member_index.idx()] = component_data;
         }

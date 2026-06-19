@@ -28,29 +28,6 @@ fn PoolRegistryT(comptime pool_configs: []const PoolConfig) type {
         pub fn getEnumByName(comptime name: []const u8) Enum {
             return std.meta.stringToEnum(Enum, name) orelse unreachable;
         }
-        
-        pub fn CreateComponentSubset(comptime components: []const Component) type {
-            var names: [components.len][]const u8 = undefined;
-            var vals:[components.len]u8 = undefined;
-        
-            for(components, 0..) |comp, i| {
-                names[i] = @tagName(comp);
-                vals[i] = @intFromEnum(comp);
-            }
-        
-            return @Enum(
-                u8,
-                .exhaustive,
-                &names,
-                &vals,
-            );
-        }
-
-        pub fn GetPoolComponentEnum(comptime pool: Enum) type {
-            const config = comptime getConfigByEnum(pool);
-            const subset = CreateComponentSubset(config.components);
-            return subset;
-        }
     };
 }
 
