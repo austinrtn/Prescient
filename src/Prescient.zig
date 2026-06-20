@@ -56,7 +56,7 @@ const EntNamespace = struct {
         return try pool_interface.createEnt(ent);
     }
 
-    pub fn getComponent(self: *Self, entity_id: EntityId, comptime component: Component) CR.getCompTypeByEnum(component) {
+    pub fn getComponent(self: *Self, entity_id: EntityId, comptime component: Component) CR.GetComponentTypeByEnum(component) {
         const slot = self.prescient.id_manager.getSlot(entity_id);
 
         switch (slot.pool_id) {

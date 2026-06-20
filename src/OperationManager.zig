@@ -13,28 +13,27 @@ const Component = CR.Enum;
 const RecordIndex = Registry.RecordIndex;
 
 const Operation = enum {
-    addEnt,
+    createEnt,
     deleteEnt,
     addComp,
     removeComp,
 };
 
 const PendingOperation = struct {
-    component: Component, 
-    operation: Operation, 
+    operation: Operation,
+    component: ?Component = null,
     component_index: ?ComponentIndex = null,
 };
 
-
-pub fn OperationManager(comptime components: []const Component) type {
-    const Storage = ComponentStorage(components);
-    const EntityRecord = EntityRecordType(components);
+pub fn OperationManager(comptime PoolComponent: type) type {
+    const Storage = ComponentStorage(PoolComponent);
+    const EntityRecord = EntityRecordType(PoolComponent.Enum);
     const HashMap = HashMapType(EntityId, ArrayList(PendingOperation));
 
     return struct {
         const Self = @This();
         allocator: std.mem.Allocator,
-        
+
         entity_records: ArrayList(EntityRecord) = .empty,
         pending_operations: HashMap = .empty,
         pending_components: Storage = undefined,
@@ -49,10 +48,47 @@ pub fn OperationManager(comptime components: []const Component) type {
         pub fn deinit(self: *Self) void {
             self.pending_components.deinit();
             self.entity_records.deinit(self.allocator);
-            for(self.pending_operations.values()) |*list| list.deinit(self.allocator);
+            for (self.pending_operations.values()) |*list| list.deinit(self.allocator);
             self.pending_operations.deinit(self.allocator);
         }
 
+        pub fn appendOperation(self: *Self, comptime operation: Operation, component_data: anytype, record_data: EntityRecord.RecordData) !void {
+            const ent_id = record_data.entity_id;
+            const ent_record = EntityRecord.init(record_data);
+
+            const operations = blk: {
+                const res = try self.pending_operations.getOrPut(self.allocator, ent_id);
+                if(!res.found_existing) {
+                    res.value_ptr.* = .empty;
+                }
+                break :blk res.value_ptr;
+            };
+            
+            switch (operation) {
+                .createEnt => {
+                    
+                },
+                
+                .addComp => {
+                    
+                },
+                
+                .deleteEnt => {
+                    
+                },
+                
+                .removeComp => {
+                    
+                },
+            }
+            
+            try self.entity_records.append(ent_record);
+        }
+
+        pub fn appendCreateEnt(self: *Self, component_data: anytype) !void {
+            
+        }
+        
         // pub fn addOperation(self: *Self, comptime operation: Operation, component_data: anytype, record_data: EntityRecord.RecordData) !void {
         //     const ent_id = record_data.entity_id;
         //     var ent_record: EntityRecord = .init(record_data);
@@ -91,7 +127,7 @@ pub fn OperationManager(comptime components: []const Component) type {
                 @compileError("Invalid Operation value for appendAddOperation function");
 
             inline for (std.meta.fields(@TypeOf(component_data))) |field| {
-                const comp_tag = comptime CR.getEnumByName(field.name);
+                const comp_tag = comptime PoolComponent.localize(CR.getEnumByName(field.name));
                 const comp_value = @field(component_data, field.name);
                 const comp_list = self.pending_components.getComponentArray(comp_tag);
                 try comp_list.append(self.allocator, comp_value);
@@ -106,55 +142,7 @@ pub fn OperationManager(comptime components: []const Component) type {
     };
 }
 
-// const InnerOperationQueue = blk: {
-//     const operations = std.meta.tags(Operation);
-//     var names: [operations.len][]const u8 = undefined;
-//     var types: [operations.len]type = undefined;
-//     var attrs: [operations.len]std.builtin.Type.StructField.Attributes = undefined;
+const testing = std.testing;
 
-//     for (operations, 0..) |operation, i| {
-//         names[i] = @tagName(operation);
-//         types[i] = ArrayList(RecordIndex);
-//         attrs[i] = .{};
-//     }
-
-//     break :blk @Struct(
-//         .auto,
-//         null,
-//         &names,
-//         &types,
-//         &attrs,
-//     );
-// };
-
-// const OperationQueue = struct {
-//     const Self = @This();
-
-//     allocator: std.mem.Allocator,
-//     inner_storage: InnerOperationQueue = undefined,
-
-//     pub fn init(allocator: std.mem.Allocator) Self {
-//         var self: Self = .{ .allocator = allocator };
-
-//         inline for (std.meta.fields(InnerOperationQueue)) |field| {
-//             @field(self.inner_storage, field.name) = .empty;
-//         }
-
-//         return self;
-//     }
-
-//     pub fn deinit(self: *Self) void {
-//         inline for (std.meta.fields(InnerOperationQueue)) |field| {
-//             @field(self.inner_storage, field.name).deinit(self.allocator);
-//         }
-//     }
-
-//     pub fn addToOperationArray(self: *Self, comptime operation: Operation, record_index: RecordIndex) !void {
-//         const op_array = self.getOperationArray(operation);
-//         try op_array.append(self.allocator, record_index);
-//     }
-
-//     pub fn getOperationArray(self: *Self, comptime operation: Operation) *ArrayList(RecordIndex) {
-//         return &@field(self.inner_storage, @tagName(operation));
-//     }
-// };
+test "Start" {
+}

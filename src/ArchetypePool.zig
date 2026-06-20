@@ -3,7 +3,6 @@ const ArrayList = std.ArrayList;
 const HashMap = std.AutoArrayHashMapUnmanaged;
 const CR = @import("ComponentRegistry.zig").ComponentRegistry;
 const PR = @import("PoolRegistry.zig").PoolRegistry;
-const Component = CR.Enum;
 const getBitmask = CR.getBitmaskOfComponents;
 
 const ArchetypeStorageT = @import("ArchetypeStorage.zig").Archetype;
@@ -15,11 +14,10 @@ const GroupIndex = Registry.GroupIndex;
 const MemberIndex = Registry.MemberIndex;
 
 pub fn ArchetypePool(comptime config: Config) type {
-    const pool_comps = config.components;
     const TAG = std.meta.stringToEnum(PR.Enum, config.name) orelse unreachable;
     const PoolComponentType = PoolComponentT(TAG);
-    const ARCHETYPE = ArchetypeStorageT(PoolComponentType);
-    const GroupEntry = struct { group_index: GroupIndex, group: *ARCHETYPE };
+    const ArchetypeType = ArchetypeStorageT(PoolComponentType);
+    const GroupEntry = struct { group_index: GroupIndex, group: *ArchetypeType };
     const AppendData = struct { group_index: GroupIndex, member_index: MemberIndex };
 
     const AddComponentResult = struct {
@@ -32,9 +30,9 @@ pub fn ArchetypePool(comptime config: Config) type {
     return struct {
         const Self = @This();
         pub const PoolComponent = PoolComponentType;
-        pub const Archetype = ARCHETYPE;
+        pub const Archetype = ArchetypeType;
         pub const tag = TAG;
-        pub const pool_mask = getBitmask(pool_comps);
+        pub const pool_mask = getBitmask(PoolComponent.GlobalComponents);
 
         allocator: std.mem.Allocator,
         groups: HashMap(CR.BitSet, GroupEntry) = .empty,
@@ -66,12 +64,12 @@ pub fn ArchetypePool(comptime config: Config) type {
             return group.remove(member_index);
         }
 
-        pub fn getComponent(self: *Self, comptime component: PoolComponent.Enum, group_index: GroupIndex, member_index: MemberIndex) CR.getCompTypeByEnum(PoolComponent.globalize(component)) {
+        pub fn getComponent(self: *Self, comptime component: PoolComponent.Enum, group_index: GroupIndex, member_index: MemberIndex) CR.GetComponentTypeByEnum(PoolComponent.globalize(component)) {
             const group = self.getGroupByIndex(group_index).group;
             return group.getComponent(component, member_index);
         }
 
-        pub fn setComponent(self: *Self, comptime component: PoolComponent.Enum, component_value: CR.getCompTypeByEnum(PoolComponent.globalize(component)), group_index: GroupIndex, member_index: MemberIndex) void {
+        pub fn setComponent(self: *Self, comptime component: PoolComponent.Enum, component_value: CR.GetComponentTypeByEnum(PoolComponent.globalize(component)), group_index: GroupIndex, member_index: MemberIndex) void {
             const group = self.getGroupByIndex(group_index).group;
             group.setComponent(component, component_value, member_index);
         }
@@ -79,7 +77,7 @@ pub fn ArchetypePool(comptime config: Config) type {
         pub fn addComponent(
             self: *Self,
             comptime component: PoolComponent.Enum,
-            component_value: CR.getCompTypeByEnum(PoolComponent.globalize(component)),
+            component_value: CR.GetComponentTypeByEnum(PoolComponent.globalize(component)),
             entity_id: EntityId,
             group_index: GroupIndex,
             member_index: MemberIndex,
@@ -89,10 +87,10 @@ pub fn ArchetypePool(comptime config: Config) type {
 
             const group = self.getGroupByIndex(group_index).group;
 
-            // var comp_buf: [pool_comps.len] Component = undefined;
+            // var comp_buf: [PoolComponent.GlobalComponents.len] CR.Enum = undefined;
             // const mask_comps = CR.getComponentsFromMask(new_mask, &comp_buf);
 
-            var comp_value = CR.initMaskToPartialComponentStruct(pool_comps);
+            var comp_value = CR.initMaskToPartialComponentStruct(PoolComponent.GlobalComponents);
             inline for (comptime PoolComponent.Tags) |comp| {
                 if (CR.maskContainsComponent(PoolComponent.globalize(comp), new_mask)) {
                     const field = &@field(comp_value, @tagName(comp));

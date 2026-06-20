@@ -9,7 +9,7 @@ const EntityId = Registry.EntityId;
 
 pub fn PoolInterface(comptime pool_config: PR.Config) type {
     const EntPool = EntPoolType(pool_config);
-    const pool_mask = CR.getBitmaskOfComponents(pool_config.components);
+    const pool_mask = EntPool.pool_mask;
 
     return struct {
         const Self = @This();
@@ -30,7 +30,7 @@ pub fn PoolInterface(comptime pool_config: PR.Config) type {
             // Get entity's slot, convert the ent anytype fields into specified component types
             var slot = self.id_manager.getNextSlot();
             inline for (std.meta.fields(@TypeOf(ent))) |field| validateComponent(CR.getEnumByName(field.name));
-            const converted_ent = CR.AnomToTypedComponentStruct(ent);
+            const converted_ent = CR.anomToTypedComponentStruct(ent);
             const new_location = try self.ent_pool.addEnt(converted_ent, slot.entity_id);
 
             slot.pool_id = PoolTag;
@@ -53,7 +53,7 @@ pub fn PoolInterface(comptime pool_config: PR.Config) type {
             try self.id_manager.sendSlotToQueue(entity_id);
         }
 
-        pub fn getComponent(self: *Self, entity_id: EntityId, comptime component: Component) CR.getCompTypeByEnum(component) {
+        pub fn getComponent(self: *Self, entity_id: EntityId, comptime component: Component) CR.GetComponentTypeByEnum(component) {
             const slot = self.id_manager.getSlot(entity_id);
             return self.ent_pool.getComponent(Local(component), slot.group_index, slot.member_index);
         }

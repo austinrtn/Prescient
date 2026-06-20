@@ -17,11 +17,11 @@ pub fn ComponentRegistryT(comptime comp_descs: []const ComponentDesc) type {
         
         const string_type_map = stringTypeMap(comp_descs);
 
-        pub fn getCompTypeByEnum(comptime component: Enum) type {
+        pub fn GetComponentTypeByEnum(comptime component: Enum) type {
             return string_type_map.get(@tagName(component)) orelse unreachable;
         }
         
-        pub fn GetCompTypeByName(comptime component: []const u8) type {
+        pub fn GetComponentTypeByName(comptime component: []const u8) type {
             return string_type_map.get(component) orelse unreachable;
         }
 
@@ -78,7 +78,7 @@ pub fn ComponentRegistryT(comptime comp_descs: []const ComponentDesc) type {
             return @intFromEnum(component);
         }
 
-        pub fn EntTypeToCompStruct(comptime EntType: type) type {
+        pub fn EntTypeToComponentStruct(comptime EntType: type) type {
             const fields = std.meta.fields(EntType);
             var names: [fields.len][]const u8 = undefined;
             var types: [fields.len]type = undefined;
@@ -86,7 +86,7 @@ pub fn ComponentRegistryT(comptime comp_descs: []const ComponentDesc) type {
             
             for (fields, 0..) |field, i| {
                 names[i] = field.name;
-                types[i] = GetCompTypeByName(field.name);
+                types[i] = GetComponentTypeByName(field.name);
                 attrs[i] = .{};
             }
             
@@ -99,9 +99,9 @@ pub fn ComponentRegistryT(comptime comp_descs: []const ComponentDesc) type {
             );
         }
 
-        pub fn AnomToTypedComponentStruct(anom_ent: anytype) EntTypeToCompStruct(@TypeOf(anom_ent)){
+        pub fn anomToTypedComponentStruct(anom_ent: anytype) EntTypeToComponentStruct(@TypeOf(anom_ent)){
             const EntType = @TypeOf(anom_ent);
-            var container: EntTypeToCompStruct(EntType) = undefined;
+            var container: EntTypeToComponentStruct(EntType) = undefined;
 
             inline for(std.meta.fields(EntType)) |field| {
                 const anom_comp = @field(anom_ent, field.name);
@@ -111,9 +111,9 @@ pub fn ComponentRegistryT(comptime comp_descs: []const ComponentDesc) type {
             return container;
         }
 
-        pub fn convertAnomToComponent(anom: anytype, comptime comp_name: []const u8) GetCompTypeByName(comp_name) {
+        pub fn convertAnomToComponent(anom: anytype, comptime comp_name: []const u8) GetComponentTypeByName(comp_name) {
             const AnomType = @TypeOf(anom);
-            const CompType = GetCompTypeByName(comp_name); 
+            const CompType = GetComponentTypeByName(comp_name); 
             var comp: CompType = undefined; 
             
             if(@typeInfo(CompType) == .@"struct") {
@@ -134,7 +134,7 @@ pub fn ComponentRegistryT(comptime comp_descs: []const ComponentDesc) type {
             var attrs: [components.len]std.builtin.Type.StructField.Attributes = undefined;
 
             inline for(components, 0..) |comp, i| {
-                const CompType = getCompTypeByEnum(comp);
+                const CompType = GetComponentTypeByEnum(comp);
                 const T = if(get_slices) []CompType else CompType;
                 names[i] = @tagName(comp);
                 types[i] = T;
@@ -156,7 +156,7 @@ pub fn ComponentRegistryT(comptime comp_descs: []const ComponentDesc) type {
             var attrs: [components.len]std.builtin.Type.StructField.Attributes = undefined;
             
             inline for (components, 0..) |comp, i| {
-                const T = getCompTypeByEnum(comp);
+                const T = GetComponentTypeByEnum(comp);
                 names[i] = @tagName(comp);
                 types[i] = ?T;
                 attrs[i] = .{};

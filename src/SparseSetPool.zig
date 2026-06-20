@@ -2,7 +2,6 @@ const std = @import("std");
 const ArrayList = std.ArrayList;
 const HashMap = std.AutoArrayHashMapUnmanaged;
 const CR = @import("ComponentRegistry.zig").ComponentRegistry;
-const Component = CR.Enum;
 const PR = @import("PoolRegistry.zig").PoolRegistry;
 const getBitmask = CR.getBitmaskOfComponents;
 const Registry = @import("Registry.zig").Registry;
@@ -22,15 +21,15 @@ fn ComponentWithOwner(comptime ComponentType: type) type {
     };
 }
 
-fn SparseSetStorage(comptime components: []const Component) type {
-    var names: [components.len][]const u8 = undefined;
-    var types: [components.len]type = undefined;
-    var attrs: [components.len]std.builtin.Type.StructField.Attributes = undefined;
+fn SparseSetStorage(comptime PoolComponent: type) type {
+    var names: [PoolComponent.Tags.len][]const u8 = undefined;
+    var types: [PoolComponent.Tags.len]type = undefined;
+    var attrs: [PoolComponent.Tags.len]std.builtin.Type.StructField.Attributes = undefined;
 
-    for (components, 0..) |comp, i| {
-        const CompType = CR.getCompTypeByEnum(comp);
+    for (PoolComponent.Tags, 0..) |component, i| {
+        const CompType = CR.GetComponentTypeByEnum(PoolComponent.globalize(component));
 
-        names[i] = @tagName(comp);
+        names[i] = @tagName(component);
         types[i] = ArrayList(ComponentWithOwner(CompType));
         attrs[i] = .{};
     }
@@ -45,21 +44,21 @@ fn SparseSetStorage(comptime components: []const Component) type {
 }
 
 pub fn SparseSetPool(comptime config: PR.Config) type {
-    const pool_comps = config.components;
     const TAG = std.meta.stringToEnum(PR.Enum, config.name) orelse unreachable;
+    const PoolComponentType = PoolComponentT(TAG);
 
-    const Storage = SparseSetStorage(config.components);
+    const Storage = SparseSetStorage(PoolComponentType);
     const StorageFields = std.meta.fields(Storage);
     const AppendData = struct { group_index: GroupIndex, member_index: MemberIndex };
     const GroupEntry = struct { group_index: GroupIndex, group: *ArrayList(RecordIndex) };
 
     return struct {
         const Self = @This();
-        pub const PoolComponent = PoolComponentT(TAG);
+        pub const PoolComponent = PoolComponentType;
         const EntityRecord = EntityRecordType(PoolComponent.Enum);
 
         pub const tag = TAG;
-        pub const pool_mask = getBitmask(pool_comps);
+        pub const pool_mask = getBitmask(PoolComponent.GlobalComponents);
 
         allocator: std.mem.Allocator,
         groups: HashMap(CR.BitSet, GroupEntry) = .empty,
@@ -161,7 +160,7 @@ pub fn SparseSetPool(comptime config: PR.Config) type {
             return swapped_ent_id;
         }
 
-        pub fn getComponent(self: *Self, comptime component: PoolComponent.Enum, group_index: GroupIndex, member_index: MemberIndex) CR.getCompTypeByEnum(PoolComponent.globalize(component)) {
+        pub fn getComponent(self: *Self, comptime component: PoolComponent.Enum, group_index: GroupIndex, member_index: MemberIndex) CR.GetComponentTypeByEnum(PoolComponent.globalize(component)) {
             const group = self.groups.values()[group_index.idx()].group;
 
             const record_idx = group.items[member_index.idx()];
@@ -172,7 +171,7 @@ pub fn SparseSetPool(comptime config: PR.Config) type {
             return comp_array.items[comp_idx.idx()].value;
         }
 
-        pub fn setComponent(self: *Self, comptime component: PoolComponent.Enum, component_value: CR.getCompTypeByEnum(PoolComponent.globalize(component)), group_index: GroupIndex, member_index: MemberIndex) void {
+        pub fn setComponent(self: *Self, comptime component: PoolComponent.Enum, component_value: CR.GetComponentTypeByEnum(PoolComponent.globalize(component)), group_index: GroupIndex, member_index: MemberIndex) void {
             const comp_name = @tagName(component);
             const group = self.groups.values()[group_index.idx()].group;
 
@@ -193,7 +192,7 @@ pub fn SparseSetPool(comptime config: PR.Config) type {
         pub fn addComponent(
             self: *Self,
             comptime component: PoolComponent.Enum,
-            component_value: CR.getCompTypeByEnum(PoolComponent.globalize(component)),
+            component_value: CR.GetComponentTypeByEnum(PoolComponent.globalize(component)),
             entity_id: EntityId,
             group_index: GroupIndex,
             member_index: MemberIndex,

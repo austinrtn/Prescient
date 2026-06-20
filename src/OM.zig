@@ -26,18 +26,18 @@ const PendingOperation = struct {
     dest_bitmask: CR.BitSet,
 };
 
-pub fn OperationManager(comptime components: []const Component) type {
-    const Storage = ComponentStorage(components);
-    const EntityRecord = EntityRecordType(components);
+pub fn OperationManager(comptime PoolComponent: type) type {
+    const Storage = ComponentStorage(PoolComponent);
+    const EntityRecord = EntityRecordType(PoolComponent.Enum);
     const HashMap = HashMapType(EntityId, ArrayList(PendingOperation));
 
     return struct {
         const Self = @This();
         allocator: std.mem.Allocator,
-        
+
         entity_records: ArrayList(EntityRecord) = .empty,
         pending_operations: HashMap = .empty,
-        
+
         storage: Storage = undefined,
 
         pub fn init(allocator: std.mem.Allocator) Self {
@@ -50,7 +50,7 @@ pub fn OperationManager(comptime components: []const Component) type {
         pub fn deinit(self: *Self) void {
             self.storage.deinit();
             self.entity_records.deinit(self.allocator);
-            for(self.pending_operations.values()) |*list| list.deinit(self.allocator);
+            for (self.pending_operations.values()) |*list| list.deinit(self.allocator);
             self.pending_operations.deinit(self.allocator);
         }
 
@@ -92,7 +92,7 @@ pub fn OperationManager(comptime components: []const Component) type {
                 @compileError("Invalid Operation value for appendAddOperation function");
 
             inline for (std.meta.fields(@TypeOf(component_data))) |field| {
-                const comp_tag = comptime CR.getEnumByName(field.name);
+                const comp_tag = comptime PoolComponent.localize(CR.getEnumByName(field.name));
                 const comp_value = @field(component_data, field.name);
                 const comp_list = self.storage.getComponentArray(comp_tag);
                 try comp_list.append(self.allocator, comp_value);

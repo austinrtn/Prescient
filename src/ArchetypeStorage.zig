@@ -1,24 +1,15 @@
 const std = @import("std");
 const ArrayList = std.ArrayList;
 const CR = @import("ComponentRegistry.zig").ComponentRegistry;
-const Component = CR.Enum;
 const ComponentStorage = @import("ComponentStorage.zig").ComponentStorage;
 const Registry = @import("Registry.zig").Registry;
 const EntityId = Registry.EntityId;
 const MemberIndex = Registry.MemberIndex;
 
 pub fn Archetype(comptime PoolComponent: type) type {
-    const global_components = blk: {
-        var components: [PoolComponent.Tags.len]Component = undefined;
-        for (PoolComponent.Tags, 0..) |component, i| {
-            components[i] = PoolComponent.globalize(component);
-        }
-        break :blk components;
-    };
-
-    const Storage = ComponentStorage(&global_components);
-    const EntTypeSlices = CR.GetTypeOfComponents(&global_components, true);
-    const bit_mask = CR.getBitmaskOfComponents(&global_components);
+    const Storage = ComponentStorage(PoolComponent);
+    const EntTypeSlices = CR.GetTypeOfComponents(PoolComponent.GlobalComponents, true);
+    const bit_mask = CR.getBitmaskOfComponents(PoolComponent.GlobalComponents);
 
     return struct {
         const Self = @This();
@@ -52,18 +43,8 @@ pub fn Archetype(comptime PoolComponent: type) type {
                 const field_name = @tagName(comp);
                 if (@hasField(EntType, field_name)) {
                     const comp_value = @field(ent, field_name);
-                    const comp_info = @typeInfo(@TypeOf(comp_value));
-
-                    if (comp_info == .optional and comp_value != null) {
-                        try @field(self.comp_storage.inner_storage, field_name).append(self.allocator, comp_value.?);
-                    } else if (comp_info != .optional) {
-                        try @field(self.comp_storage.inner_storage, field_name).append(self.allocator, comp_value);
-                    }
+                    try self.comp_storage.appendValueIfPresent(comp, comp_value);
                 }
-                // if (@hasField(Storage, field.name)) {
-                //     const ent_field = @field(ent, field.name);
-                //     const comp_converted = CR.convertAnomToComponent(ent_field, field.name);
-                // }
             }
 
             self.count += 1;
@@ -89,12 +70,12 @@ pub fn Archetype(comptime PoolComponent: type) type {
             return swapped_ent_id;
         }
 
-        pub fn getComponent(self: *Self, comptime component: PoolComponent.Enum, member_index: MemberIndex) CR.getCompTypeByEnum(PoolComponent.globalize(component)) {
+        pub fn getComponent(self: *Self, comptime component: PoolComponent.Enum, member_index: MemberIndex) CR.GetComponentTypeByEnum(PoolComponent.globalize(component)) {
             const comp_array = &@field(self.comp_storage.inner_storage, @tagName(component));
             return comp_array.items[member_index.idx()];
         }
 
-        pub fn setComponent(self: *Self, comptime component: PoolComponent.Enum, component_data: CR.getCompTypeByEnum(PoolComponent.globalize(component)), member_index: MemberIndex) void {
+        pub fn setComponent(self: *Self, comptime component: PoolComponent.Enum, component_data: CR.GetComponentTypeByEnum(PoolComponent.globalize(component)), member_index: MemberIndex) void {
             const comp_array = &@field(self.comp_storage.inner_storage, @tagName(component));
             comp_array.items[member_index.idx()] = component_data;
         }

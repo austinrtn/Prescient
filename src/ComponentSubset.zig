@@ -10,15 +10,20 @@ pub fn ComponentSubset(comptime pool: PR.Enum) type {
     return struct {
         pub const Enum = CreateComponentSubset(components);
         pub const Tags = std.meta.tags(Enum);
+        pub const GlobalComponents = components;
 
         pub fn localize(comptime component: Component) Enum {
-            return std.meta.stringToEnum(Enum, @tagName(component)) orelse
-                @compileError("Component " ++ @tagName(component) ++ " does not exist within pool scope!");
+            inline for (Tags) |pool_component| {
+                if (@intFromEnum(pool_component) == @intFromEnum(component)) {
+                    return pool_component;
+                }
+            }
+
+            @compileError("Component " ++ @tagName(component) ++ " does not exist within pool scope!");
         }
 
         pub fn globalize(comptime pool_component: Enum) Component {
-            return std.meta.stringToEnum(Component, @tagName(pool_component)) orelse
-                @compileError("Component " ++ @tagName(pool_component) ++ " does not exist within component registry!");
+            return @enumFromInt(@intFromEnum(pool_component));
         }
     };
 }
