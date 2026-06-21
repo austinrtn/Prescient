@@ -1,7 +1,7 @@
 const std = @import("std");
 const ArrayList = std.ArrayList;
 const CR = @import("ComponentRegistry.zig").ComponentRegistry;
-
+GlobalComponent
 fn InnerComponentStorage(comptime PoolComponent: type) type {
     var names: [PoolComponent.Tags.len][]const u8 = undefined;
     var types: [PoolComponent.Tags.len]type = undefined;

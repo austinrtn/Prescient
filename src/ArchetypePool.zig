@@ -3,7 +3,7 @@ const ArrayList = std.ArrayList;
 const HashMap = std.AutoArrayHashMapUnmanaged;
 const CR = @import("ComponentRegistry.zig").ComponentRegistry;
 const PR = @import("PoolRegistry.zig").PoolRegistry;
-const getBitmask = CR.getBitmaskOfComponents;
+const getBitmask = CRGlobalComponentBitmaskOfComponents;
 
 const ArchetypeStorageT = @import("ArchetypeStorage.zig").Archetype;
 const PoolComponentT = @import("ComponentSubset.zig").ComponentSubset;

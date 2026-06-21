@@ -1,4 +1,4 @@
-const PoolConfig = @import("PoolRegistry.zig").PoolConfig;
+const PoolDesc = @import("PoolRegistry.zig").PoolDesc;
 const CR = @import("ComponentRegistry.zig");
 const ComponentDesc = CR.ComponentDesc;
 
@@ -11,7 +11,7 @@ pub const Registry = struct {
         .{ .name = "bar", .T = u32 },
     };
 
-    pub const PoolConfigs = [_]PoolConfig{
+    pub const PoolConfigs = [_]PoolDesc{
         .{
             .name = "archetype",
             .components = &.{ .pos, .vel, .id },

@@ -12,12 +12,12 @@ pub fn ComponentRegistryT(comptime comp_descs: []const ComponentDesc) type {
     return struct {
         pub const Count = comp_descs.len;
         pub const Types = ComponentTypes(comp_descs);
-        pub const Enum = ComponentEnumT(comp_descs);
+        pub const Component = ComponentEnumT(comp_descs);
         pub const BitSet = std.StaticBitSet(comp_descs.len);
         
         const string_type_map = stringTypeMap(comp_descs);
 
-        pub fn GetComponentTypeByEnum(comptime component: Enum) type {
+        pub fn GetComponentTypeByEnum(comptime component: Component) type {
             return string_type_map.get(@tagName(component)) orelse unreachable;
         }
         
@@ -25,22 +25,22 @@ pub fn ComponentRegistryT(comptime comp_descs: []const ComponentDesc) type {
             return string_type_map.get(component) orelse unreachable;
         }
 
-        pub fn getEnumByName(comptime component_name: []const u8) Enum {
-            return std.meta.stringToEnum(Enum, component_name) orelse 
+        pub fn getEnumByName(comptime component_name: []const u8) Component {
+            return std.meta.stringToEnum(Component, component_name) orelse 
                 @compileError("Component " ++ component_name ++ " does not exist in registry");
         }
 
-        pub fn getBitmaskOfComponents(comptime components: []const Enum) BitSet {
+        pub fn getBitmaskOfComponents(comptime components: []const Component) BitSet {
             var mask: BitSet = .empty;
             for(components) |comp| mask.set(@intFromEnum(comp));
             return mask;
         }
         
-        pub fn maskContainsComponent(comptime component: Enum, mask: BitSet) bool {
+        pub fn maskContainsComponent(comptime component: Component, mask: BitSet) bool {
             return mask.isSet(@intFromEnum(component));
         }
                 
-        pub fn getComponentsFromMask(mask: BitSet, comp_buf: []Enum) []Enum {
+        pub fn getComponentsFromMask(mask: BitSet, comp_buf: []Component) []Component {
             var i: usize = 0;
             var set_bits: usize = 0;
             while(i < Count) : (i += 1) {
@@ -53,12 +53,12 @@ pub fn ComponentRegistryT(comptime comp_descs: []const ComponentDesc) type {
             return comp_buf[0..set_bits];
         }
 
-        pub fn getComponentsFromType(comptime EntType: type) [std.meta.fields(EntType).len]Enum {
+        pub fn getComponentsFromType(comptime EntType: type) [std.meta.fields(EntType).len]Component {
             const ent_fields = std.meta.fields(EntType);
-            var comps: [ent_fields.len]Enum = undefined;
+            var comps: [ent_fields.len]Component = undefined;
 
             inline for(ent_fields, 0..) |field, i| {
-                comps[i] = std.meta.stringToEnum(Enum, field.name) orelse unreachable;
+                comps[i] = std.meta.stringToEnum(Component, field.name) orelse unreachable;
             }
             return comps;
         }
@@ -68,13 +68,13 @@ pub fn ComponentRegistryT(comptime comp_descs: []const ComponentDesc) type {
             return getBitmaskOfComponents(&comps);
         }
 
-        pub fn addComponentBit(comptime component: Enum, bitset: BitSet) BitSet {
+        pub fn addComponentBit(comptime component: Component, bitset: BitSet) BitSet {
             var new_bitset = bitset;
             new_bitset.set(getBitByEnum(component));
             return new_bitset;
         }
 
-        pub fn getBitByEnum(comptime component: Enum) usize {
+        pub fn getBitByEnum(comptime component: Component) usize {
             return @intFromEnum(component);
         }
 
@@ -128,7 +128,7 @@ pub fn ComponentRegistryT(comptime comp_descs: []const ComponentDesc) type {
             return comp;
         }
 
-        pub fn GetTypeOfComponents(comptime components: []const Enum, comptime get_slices: bool) type {
+        pub fn GetTypeOfComponents(comptime components: []const Component, comptime get_slices: bool) type {
             var names: [components.len][]const u8 = undefined;
             var types: [components.len]type = undefined;
             var attrs: [components.len]std.builtin.Type.StructField.Attributes = undefined;
@@ -150,7 +150,7 @@ pub fn ComponentRegistryT(comptime comp_descs: []const ComponentDesc) type {
             );
         }
 
-        fn MaskToPartialComponentStruct(comptime components: []const Enum) type {
+        fn MaskToPartialComponentStruct(comptime components: []const Component) type {
             var names: [components.len][]const u8 = undefined;
             var types: [components.len]type = undefined;
             var attrs: [components.len]std.builtin.Type.StructField.Attributes = undefined;
@@ -171,7 +171,7 @@ pub fn ComponentRegistryT(comptime comp_descs: []const ComponentDesc) type {
             );
         }
         
-        pub fn initMaskToPartialComponentStruct(comptime components: []const Enum) MaskToPartialComponentStruct(components) {
+        pub fn initMaskToPartialComponentStruct(comptime components: []const Component) MaskToPartialComponentStruct(components) {
             var build: MaskToPartialComponentStruct(components) = undefined;
 
             inline for(components) |comp| {

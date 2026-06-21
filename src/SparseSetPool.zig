@@ -43,7 +43,8 @@ fn SparseSetStorage(comptime PoolComponent: type) type {
     );
 }
 
-pub fn SparseSetPool(comptime config: PR.Config) type {
+pub fn SparseSetPool(comptime tag: PR.Enum, comptime config: PR.GetPoolConfig(tag)) type {
+    
     const TAG = std.meta.stringToEnum(PR.Enum, config.name) orelse unreachable;
     const PoolComponentType = PoolComponentT(TAG);
 

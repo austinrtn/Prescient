@@ -1,7 +1,7 @@
 const std = @import("std");
 const ArrayList = std.ArrayList;
 const CR = @import("ComponentRegistry.zig").ComponentRegistry;
-const ComponentStorage = @import("ComponentStorage.zig").ComponentStorage;
+const ComponentStoragGlobalComponent@import("ComponentStorage.zig").ComponentStorage;
 const Registry = @import("Registry.zig").Registry;
 const EntityId = Registry.EntityId;
 const MemberIndex = Registry.MemberIndex;

@@ -1,6 +1,6 @@
 const std = @import("std");
 const CR = @import("ComponentRegistry.zig").ComponentRegistry;
-const Component = CR.Enum;
+const Component = CR.GlobalComponent;
 const EntPoolType = @import("EntPool.zig").EntPool;
 const PR = @import("PoolRegistry.zig").PoolRegistry;
 const IdManager = @import("IdManager.zig").IdManager;

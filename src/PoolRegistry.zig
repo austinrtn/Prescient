@@ -2,36 +2,64 @@ const std = @import("std");
 const Pools = @import("Registry.zig").Registry.PoolConfigs;
 const EntPool = @import("EntPool.zig").EntPool;
 const CR = @import("ComponentRegistry.zig").ComponentRegistry;
-const Component = CR.Enum;
+const GlobalCompoennt = CR.Component;
+const ComponentSubset = @import("ComponentSubset.zig");
 
-pub const PoolConfig = struct {
+const StorageStrategy = enum { archetype, sparse_set };
+
+pub const PoolDesc = struct {
     name: []const u8,
-    components: []const CR.Enum,
-    storage_strategy: enum { archetype, sparse_set },
+    components: []const GlobalCompoennt,
+    storage_strategy: StorageStrategy,
 };
 
 pub const PoolRegistry = PoolRegistryT(&Pools);
 
-fn PoolRegistryT(comptime pool_configs: []const PoolConfig) type {
+fn PoolRegistryT(comptime pool_descs: []const PoolDesc) type {
     return struct {
-        pub const Enum = PoolEnumT(pool_configs);
+        pub const Enum = PoolEnumT(pool_descs);
         pub const Tags = std.meta.tags(Enum);
-        pub const Types = PoolTypes(pool_configs);
-        pub const Config = PoolConfig;
+        pub const Types = PoolTypes(pool_descs);
+        pub const Desc = PoolDesc;
 
-        const string_map = stringTypeMap(pool_configs);
+        const desc_enum_map = DescEnumMap(pool_descs);
 
-        pub fn getConfigByEnum(comptime pool: Enum) PoolConfig {
-            return string_map.get(@tagName(pool)) orelse unreachable;
+        pub fn getDescByEnum(comptime pool: Enum) PoolDesc {
+            return desc_enum_map.get(@tagName(pool)) orelse unreachable;
         }
 
         pub fn getEnumByName(comptime name: []const u8) Enum {
             return std.meta.stringToEnum(Enum, name) orelse unreachable;
         }
+        
+        pub fn GetPoolConfig(comptime tag: Enum) type {
+            const desc = getDescByEnum(tag);
+            return struct {
+                pub const Tag = std.meta.stringToEnum(Enum, desc.name) orelse unreachable;
+                pub const Component = ComponentSubset.init(desc.components);
+                pub const ComponentTags = std.meta.tags(Component);
+                pub const global_components = desc.components;
+                pub const storage_strategy = desc.storage_strategy;
+                
+                pub fn localize(comptime component: Component) Enum {
+                    inline for (Tags) |pool_component| { if (@intFromEnum(pool_component) == @intFromEnum(component)) {
+                            return pool_component;
+                        }
+                    }
+        
+                    @compileError("Component " ++ @tagName(component) ++ " does not exist within pool scope!");
+                }
+
+                
+                pub fn globalize(comptime pool_component: Enum) Component {
+                    return @enumFromInt(@intFromEnum(pool_component));
+                }
+            };
+        }
     };
 }
 
-fn PoolEnumT(comptime pool_configs: []const PoolConfig) type {
+fn PoolEnumT(comptime pool_configs: []const PoolDesc) type {
     var names: [pool_configs.len][]const u8 = undefined;
     var vals: [pool_configs.len]u8 = undefined;
 
@@ -48,12 +76,12 @@ fn PoolEnumT(comptime pool_configs: []const PoolConfig) type {
     );
 }
 
-fn PoolTypes(comptime pool_configs: []const PoolConfig) type {
-    var names: [pool_configs.len][]const u8 = undefined;
-    var types: [pool_configs.len]type = undefined;
-    var attrs: [pool_configs.len]std.builtin.Type.StructField.Attributes = undefined;
+fn PoolTypes(comptime pool_descs: []const PoolDesc) type {
+    var names: [pool_descs.len][]const u8 = undefined;
+    var types: [pool_descs.len]type = undefined;
+    var attrs: [pool_descs.len]std.builtin.Type.StructField.Attributes = undefined;
 
-    for (pool_configs, 0..) |config, i| {
+    for (pool_descs, 0..) |config, i| {
         names[i] = config.name;
         types[i] = EntPool(config);
         attrs[i] = .{};
@@ -68,14 +96,13 @@ fn PoolTypes(comptime pool_configs: []const PoolConfig) type {
     );
 }
 
-fn stringTypeMap(comptime pool_configs: []const PoolConfig) std.StaticStringMap(PoolConfig) {
-    const KV = struct { []const u8, PoolConfig };
-    var values: [pool_configs.len]KV = undefined;
+fn DescEnumMap(comptime pool_descs: []const PoolDesc) std.StaticStringMap(PoolDesc) {
+    const KV = struct { []const u8, PoolDesc};
+    var values: [pool_descs.len]KV = undefined;
 
-    for (pool_configs, 0..) |config, i| {
+    for (pool_descs, 0..) |config, i| {
         values[i] = .{ config.name, config };
     }
 
-    return std.StaticStringMap(PoolConfig).initComptime(values);
+    return std.StaticStringMap(PoolDesc).initComptime(values);
 }
-
