@@ -1,5 +1,5 @@
 const std = @import("std");
-const CR = @import("ComponentRegistry.zig").ComponentRegistry;
+const PR = @import("PoolRegistry.zig").PoolRegistry;
 const Registry = @import("Registry.zig").Registry;
 const EntityId = Registry.EntityId;
 const GroupIndex = Registry.GroupIndex;
@@ -7,21 +7,23 @@ const MemberIndex = Registry.MemberIndex;
 const RecordIndex = Registry.RecordIndex;
 const ComponentIndex = Registry.ComponentIndex;
 
-pub fn EntityRecord(comptime ComponentEnum: type) type {
-    const InnerEntRecord = InnerEntityRecord(ComponentEnum);
+pub fn EntityRecord(comptime TAG: PR.Enum) type {
+    const Config = PR.GetPoolConfig(TAG);
+    const PoolComponent = Config.Component;
+    const InnerEntRecord = InnerEntityRecord(TAG);
     return struct {
         pub const RecordData = struct {
             entity_id: EntityId,
             group_index: GroupIndex,
-            member_index: MemberIndex, 
-            record_index: RecordIndex, 
+            member_index: MemberIndex,
+            record_index: RecordIndex,
         };
 
         pub const Self = @This();
         entity_id: EntityId,
         group_index: GroupIndex,
-        member_index: MemberIndex, 
-        record_index: RecordIndex, 
+        member_index: MemberIndex,
+        record_index: RecordIndex,
         inner_record: InnerEntRecord = undefined,
 
         /// Init a new EntityRecord struct with each component index being set to null
@@ -33,24 +35,25 @@ pub fn EntityRecord(comptime ComponentEnum: type) type {
                 .record_index = record_data.record_index,
                 .inner_record = undefined,
             };
-            
-            inline for(comptime std.meta.tags(ComponentEnum)) |comp| @field(self.inner_record, @tagName(comp)) = null;
+
+            inline for (Config.ComponentTags) |comp| @field(self.inner_record, @tagName(comp)) = null;
             return self;
         }
 
-        pub fn setComponentIndex(self: *Self, comptime component: ComponentEnum, component_index: anytype) void {
+        pub fn setComponentIndex(self: *Self, comptime component: PoolComponent, component_index: anytype) void {
             @field(self.inner_record, @tagName(component)) = ComponentIndex.init(component_index);
         }
 
-        pub fn getComponentIndex(self: Self, comptime component: ComponentEnum) ?ComponentIndex {
+        pub fn getComponentIndex(self: Self, comptime component: PoolComponent) ?ComponentIndex {
             return @field(self.inner_record, @tagName(component));
         }
     };
 }
 
-fn InnerEntityRecord(comptime ComponentEnumType: type) type {
-    const components = std.meta.tags(ComponentEnumType);
-    
+fn InnerEntityRecord(comptime TAG: PR.Enum) type {
+    const Config = PR.GetPoolConfig(TAG);
+    const components = Config.ComponentTags;
+
     var names: [components.len + 4][]const u8 = undefined;
     var types: [components.len + 4]type = undefined;
     var attrs: [components.len + 4]std.builtin.Type.StructField.Attributes = undefined;
@@ -62,15 +65,15 @@ fn InnerEntityRecord(comptime ComponentEnumType: type) type {
     names[1] = "group_index";
     types[1] = GroupIndex;
     attrs[1] = .{};
-    
+
     names[2] = "member_index";
     types[2] = MemberIndex;
     attrs[2] = .{};
-    
+
     names[3] = "record_index";
     types[3] = RecordIndex;
     attrs[3] = .{};
-    
+
     for (components, 4..) |comp, i| {
         names[i] = @tagName(comp);
         types[i] = ?ComponentIndex;

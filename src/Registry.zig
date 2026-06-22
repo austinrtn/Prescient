@@ -11,7 +11,7 @@ pub const Registry = struct {
         .{ .name = "bar", .T = u32 },
     };
 
-    pub const PoolConfigs = [_]PoolDesc{
+    pub const PoolDescs = [_]PoolDesc{
         .{
             .name = "archetype",
             .components = &.{ .pos, .vel, .id },

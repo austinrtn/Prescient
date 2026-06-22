@@ -1,20 +1,22 @@
 const std = @import("std");
 const CR = @import("ComponentRegistry.zig").ComponentRegistry;
-const Component = CR.GlobalComponent;
+const Component = CR.Component;
 const EntPoolType = @import("EntPool.zig").EntPool;
 const PR = @import("PoolRegistry.zig").PoolRegistry;
 const IdManager = @import("IdManager.zig").IdManager;
 const Registry = @import("Registry.zig").Registry;
 const EntityId = Registry.EntityId;
 
-pub fn PoolInterface(comptime pool_config: PR.Config) type {
-    const EntPool = EntPoolType(pool_config);
+pub fn PoolInterface(comptime TAG: PR.Enum) type {
+    const Config = PR.GetPoolConfig(TAG);
+    const Local = Config.localize;
+    const EntPool = EntPoolType(TAG);
     const pool_mask = EntPool.pool_mask;
 
     return struct {
         const Self = @This();
-        pub const PoolComponent = EntPool.PoolComponent;
-        pub const PoolTag = PR.getEnumByName(pool_config.name);
+        pub const PoolComponent = Config.Component;
+        pub const PoolTag = Config.Tag;
 
         ent_pool: *EntPool,
         id_manager: *IdManager,
@@ -79,7 +81,7 @@ pub fn PoolInterface(comptime pool_config: PR.Config) type {
             const slot = self.id_manager.getSlot(entity_id);
 
             inline for (std.meta.fields(@TypeOf(component_values))) |field| {
-                const comp_tag = comptime PoolComponent.localize(CR.getEnumByName(field.name));
+                const comp_tag = comptime Local(CR.getEnumByName(field.name));
 
                 const comp_val = @field(component_values, field.name);
                 const comp_value = CR.convertAnomToComponent(comp_val, field.name);
@@ -107,13 +109,9 @@ pub fn PoolInterface(comptime pool_config: PR.Config) type {
         fn validateComponent(comptime component: Component) void {
             comptime {
                 if (!CR.maskContainsComponent(component, pool_mask)) {
-                    @compileError("Component " ++ @tagName(component) ++ " is not a member of Entity Pool " ++ pool_config.name ++ "\n");
+                    @compileError("Component " ++ @tagName(component) ++ " is not a member of Entity Pool " ++ @tagName(TAG) ++ "\n");
                 }
             }
-        }
-
-        fn Local(comptime component: Component) PoolComponent.Enum {
-            return PoolComponent.localize(component);
         }
     };
 }

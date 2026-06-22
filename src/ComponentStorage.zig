@@ -1,14 +1,17 @@
 const std = @import("std");
 const ArrayList = std.ArrayList;
 const CR = @import("ComponentRegistry.zig").ComponentRegistry;
-GlobalComponent
-fn InnerComponentStorage(comptime PoolComponent: type) type {
-    var names: [PoolComponent.Tags.len][]const u8 = undefined;
-    var types: [PoolComponent.Tags.len]type = undefined;
-    var attrs: [PoolComponent.Tags.len]std.builtin.Type.StructField.Attributes = undefined;
+const PR = @import("PoolRegistry.zig").PoolRegistry;
 
-    for (PoolComponent.Tags, 0..) |component, i| {
-        const T = CR.GetComponentTypeByEnum(PoolComponent.globalize(component));
+fn InnerComponentStorage(comptime TAG: PR.Enum) type {
+    const Config = PR.GetPoolConfig(TAG);
+    const Global = Config.globalize;
+    var names: [Config.ComponentTags.len][]const u8 = undefined;
+    var types: [Config.ComponentTags.len]type = undefined;
+    var attrs: [Config.ComponentTags.len]std.builtin.Type.StructField.Attributes = undefined;
+
+    for (Config.ComponentTags, 0..) |component, i| {
+        const T = CR.GetComponentTypeByEnum(Global(component));
         names[i] = @tagName(component);
         types[i] = ArrayList(T);
         attrs[i] = .{};
@@ -23,9 +26,12 @@ fn InnerComponentStorage(comptime PoolComponent: type) type {
     );
 }
 
-/// Component Storage 
-pub fn ComponentStorage(comptime PoolComponent: type) type {
-    const InnerStorage = InnerComponentStorage(PoolComponent);
+/// Component Storage
+pub fn ComponentStorage(comptime TAG: PR.Enum) type {
+    const Config = PR.GetPoolConfig(TAG);
+    const PoolComponent = Config.Component;
+    const Global = Config.globalize;
+    const InnerStorage = InnerComponentStorage(TAG);
 
     return struct {
         const Self = @This();
@@ -42,14 +48,14 @@ pub fn ComponentStorage(comptime PoolComponent: type) type {
             return self;
         }
 
-        pub fn append(self: *Self, comptime component: PoolComponent.Enum, component_value: CR.GetComponentTypeByEnum(PoolComponent.Globalize(component))) !void {
+        pub fn append(self: *Self, comptime component: PoolComponent, component_value: CR.GetComponentTypeByEnum(Global(component))) !void {
             try @field(self.inner_storage, @tagName(component)).append(self.allocator, component_value);
-        } 
+        }
 
-        pub fn appendValueIfPresent(self: *Self, comptime component: PoolComponent.Enum, component_value: anytype) !void {
+        pub fn appendValueIfPresent(self: *Self, comptime component: PoolComponent, component_value: anytype) !void {
             const comp_info = @typeInfo(@TypeOf(component_value));
             const field_name = comptime @tagName(component);
-            
+
             if (comp_info == .optional and component_value != null) {
                 try @field(self.inner_storage, field_name).append(self.allocator, component_value.?);
             } else if (comp_info != .optional) {
@@ -63,7 +69,7 @@ pub fn ComponentStorage(comptime PoolComponent: type) type {
             }
         }
 
-        pub fn getComponentArray(self: *Self, comptime component: PoolComponent.Enum) *ArrayList(CR.GetComponentTypeByEnum(PoolComponent.globalize(component))) {
+        pub fn getComponentArray(self: *Self, comptime component: PoolComponent) *ArrayList(CR.GetComponentTypeByEnum(Global(component))) {
             return &@field(self.inner_storage, @tagName(component));
         }
     };

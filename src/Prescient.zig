@@ -1,7 +1,7 @@
 const std = @import("std");
 const Registry = @import("Registry.zig").Registry;
 const CR = @import("ComponentRegistry.zig").ComponentRegistry;
-const Component = CR.GlobalComponent;
+const Component = CR.Component;
 const PR = @import("PoolRegistry.zig").PoolRegistry;
 const PoolManager = @import("PoolManager.zig").PoolManager;
 const PoolInterface = @import("PoolInterface.zig").PoolInterface;
@@ -40,9 +40,9 @@ pub const Prescient = struct {
         allocator.destroy(self);
     }
 
-    pub fn getPool(self: *Self, comptime pool: PR.Enum) PoolInterface(PR.getConfigByEnum(pool)) {
+    pub fn getPool(self: *Self, comptime pool: PR.Enum) PoolInterface(pool) {
         const ent_pool = self.pool_manager.getPool(pool);
-        return PoolInterface(PR.getConfigByEnum(pool)).init(ent_pool, self.id_manager);
+        return PoolInterface(pool).init(ent_pool, self.id_manager);
     }
 };
 
@@ -52,7 +52,7 @@ const EntNamespace = struct {
 
     pub fn create(self: *Self, comptime pool: PR.Enum, ent: anytype) !EntityId {
         const ent_pool = self.prescient.pool_manager.getPool(pool);
-        var pool_interface = PoolInterface(PR.getConfigByEnum(pool)).init(ent_pool, self.prescient.id_manager);
+        var pool_interface = PoolInterface(pool).init(ent_pool, self.prescient.id_manager);
         return try pool_interface.createEnt(ent);
     }
 

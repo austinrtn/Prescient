@@ -73,7 +73,7 @@ pub fn OperationManager(comptime PoolComponent: type) type {
             
             switch (operation) {
                 .createEnt => {
-                    pending_op = try self.appendCreateEnt(component_data, &ent_record);
+                    // pending_op = try self.appendCreateEnt(component_data, &ent_record);
                 },
                 
                 .addComp, .removeComp => |op| {
