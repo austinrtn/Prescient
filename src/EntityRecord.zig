@@ -41,7 +41,12 @@ pub fn EntityRecord(comptime TAG: PR.Enum) type {
         }
 
         pub fn setComponentIndex(self: *Self, comptime component: PoolComponent, component_index: anytype) void {
-            @field(self.inner_record, @tagName(component)) = ComponentIndex.init(component_index);
+            const typeOf = @TypeOf(component_index);
+            const info = @typeInfo(typeOf);
+            
+            if(typeOf == ComponentIndex) @field(self.inner_record, @tagName(component)) = component_index
+            else if(info == .int) @field(self.inner_record, @tagName(component)) = ComponentIndex.init(component_index)
+            else unreachable;
         }
 
         pub fn getComponentIndex(self: Self, comptime component: PoolComponent) ?ComponentIndex {

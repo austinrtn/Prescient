@@ -72,5 +72,10 @@ pub fn ComponentStorage(comptime TAG: PR.Enum) type {
         pub fn getComponentArray(self: *Self, comptime component: PoolComponent) *ArrayList(CR.GetComponentTypeByEnum(Global(component))) {
             return &@field(self.inner_storage, @tagName(component));
         }
+
+        pub fn getComponentArrayLen(self: *Self, comptime component: PoolComponent) usize {
+            const ar = self.getComponentArray(component);
+            return ar.items.len;
+        }
     };
 }

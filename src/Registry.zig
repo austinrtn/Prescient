@@ -29,6 +29,7 @@ pub const Registry = struct {
     pub const MemberIndex = TypedIndex(u32, "MemberIndex");
     pub const RecordIndex = TypedIndex(u32, "RecordIndex");
     pub const ComponentIndex = TypedIndex(u32, "ComponentIndex");
+    pub const OperationIndex = TypedIndex(u32, "OperationIndex");
 
     pub fn TypedIndex(comptime T: type, comptime name: []const u8) type {
         return struct {
