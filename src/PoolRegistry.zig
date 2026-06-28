@@ -51,6 +51,11 @@ fn PoolRegistryT(comptime pool_descs: []const PoolDesc) type {
                 pub fn globalize(comptime pool_component: Component) GlobalComponent {
                     return @enumFromInt(@intFromEnum(pool_component));
                 }
+
+                pub fn getComponentFromName(comptime name: []const u8) Component {
+                    return std.meta.stringToEnum(Component, name) orelse 
+                    @compileError("Component " ++ name ++ " does not exist in pool" ++ @tagName(Tag));
+                }
             };
         }
     };
