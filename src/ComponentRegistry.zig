@@ -114,8 +114,9 @@ pub fn ComponentRegistryT(comptime comp_descs: []const ComponentDesc) type {
         pub fn convertAnomToComponent(anom: anytype, comptime comp_name: []const u8) GetComponentTypeByName(comp_name) {
             const AnomType = @TypeOf(anom);
             const CompType = GetComponentTypeByName(comp_name); 
-            var comp: CompType = undefined; 
+            if(AnomType == CompType) return anom;
             
+            var comp: CompType = undefined; 
             if(@typeInfo(CompType) == .@"struct") {
                 inline for(std.meta.fields(CompType)) |field| {
                     if(!@hasField(AnomType, field.name)) {

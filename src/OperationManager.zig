@@ -55,15 +55,23 @@ pub fn OperationManager(comptime TAG: PR.Enum) type {
         const Self = @This();
         allocator: std.mem.Allocator,
 
-        entity_records: ArrayList(EntityRecord) = .empty, //Used to store entity records of each ent.  Don't think is necessary but keeping for now  
-        pending_entity_groups: PendingEntityGroupMap = .empty, //Stores an arraylist of Pending Entities as the value, the group / bitmask is the key.  
-                                                                // Functionally stores pending entity data partioned by component compisistion
+        ///Used to store entity records of each entity.  Don't think is necessary but keeping for now.  Could probably just use temp instances durring flush
+        entity_records: ArrayList(EntityRecord) = .empty,
+        
+        /// Stores an arraylist of Pending Entities as the value, the group / bitmask is the key.  
+        /// Functionally stores pending entity data, separated by component compisistion
+        pending_entity_groups: PendingEntityGroupMap = .empty, 
 
-        pending_entity_indices: PendingEntityIndexMap = .empty, // Stores an index to where the the PendingEntity struct exist within pending_entity_groups group list.  
-                                                                // Requires record data / group index to look up which group list it exist within
-                                                                
-        pending_operations: ArrayList(PendingOperation) = .empty, // A linear arraylist that contains all Pending operations
-        pending_components: Storage = undefined, // Sparse-set storage that houses all pending component data 
+        /// Stores an index to where the PendingEntity struct exist within pending_entity_groups group list using Entity ID as the key.  
+        /// Requires record data / group index to look up which group list it exist within
+        /// Used to retrieve PendingEntity data durring staging phase of the OperationManager
+        pending_entity_indices: PendingEntityIndexMap = .empty,                                                                 
+        
+        /// A linear arraylist that contains all Pending operations
+        pending_operations: ArrayList(PendingOperation) = .empty, 
+        
+        /// Sparse-set storage that houses all pending component data 
+        pending_components: Storage = undefined, 
 
         /// Create a new instance of OperationManager
         pub fn init(allocator: std.mem.Allocator) Self {
@@ -105,7 +113,7 @@ pub fn OperationManager(comptime TAG: PR.Enum) type {
         }
 
         /// Where compoent and entity data goes when component data is being *added* to the queue.  
-        /// Goes through each entity field / component, appends each component to the data base, 
+        /// Loops through each entity field / component, appends each component to the data base, 
         /// and records each operation individually.
         fn appendAddPendingOperation(self: *Self, comptime operation: Operation, component_data: anytype, pending_entity: *PendingEntity, entity_record: *EntityRecord) !void {
             const EntType = @TypeOf(component_data);
@@ -137,19 +145,23 @@ pub fn OperationManager(comptime TAG: PR.Enum) type {
             }
         }
 
-        ///Puts or retrives a new GroupHashMap key / value 
+        ///Puts or retrives a new GroupHashMap key / value.  Stores group index as key and PendingEntity group [*ArrayList(PendingEntity)] as value 
         fn getOrSetPendingEntityGroup(self: *Self, group_index: GroupIndex) !*ArrayList(PendingEntity) {
-            const result = try self.pending_entity_groups.getOrPut(self.allocator, group_index);
-            if (!result.found_existing) result.value_ptr.* = .empty;
+            const res = try self.pending_entity_groups.getOrPut(self.allocator, group_index);
+            if (!res.found_existing) res.value_ptr.* = .empty;
 
-            return result.value_ptr;
+            return res.value_ptr;
         }
 
+        ///Puts or retrives a new PendingEntity key / value.  Stores HashMap as key and PendingEntity instance as value.
         fn getOrSetPendingEntity(self: *Self, record_data: RecordData, operation: Operation) !*PendingEntity {
+            // If the entity has already exists within the operation manager...
             if (self.pending_entity_indices.get(record_data.entity_id)) |pending_entity_index| {
+                // Get the group arraylist that the PendingEntity data should exist within
                 const group = self.pending_entity_groups.getPtr(record_data.group_index).?;
                 std.debug.assert(pending_entity_index.idx() < group.items.len);
 
+                
                 const pending_entity = &group.items[pending_entity_index.idx()];
                 const entity_record = self.entity_records.items[pending_entity.record_index.idx()];
                 std.debug.assert(entity_record.entity_id.eql(record_data.entity_id));
@@ -159,6 +171,9 @@ pub fn OperationManager(comptime TAG: PR.Enum) type {
                 return pending_entity;
             }
 
+            // If the entity does not yet exist within the operation manager
+            // Create a new PendingEntity instance as well as PendingEntityIndex 
+            // and add it to the operation manager
             const group = try self.getOrSetPendingEntityGroup(record_data.group_index);
             const pending_entity_index: PendingEntityIndex = .init(group.items.len);
             const pending_entity: PendingEntity = .{
@@ -182,7 +197,9 @@ pub fn OperationManager(comptime TAG: PR.Enum) type {
             return &group.items[pending_entity_index.idx()];
         }
 
+        /// Add component data to the OperationManager, pending for flush
         fn appendPendingComponent(self: *Self, comptime component: PoolComponent, component_value: anytype) !ComponentIndex {
+            // Convert anomous struct data into typed data
             const converted_comp = CR.convertAnomToComponent(component_value, @tagName(component));
             const component_index: ComponentIndex = .init(self.pending_components.getComponentArrayLen(component));
 
@@ -191,6 +208,7 @@ pub fn OperationManager(comptime TAG: PR.Enum) type {
             return component_index;
         }
 
+        /// Creates a new PendingOperation instance and appends it to the pending_operations arraylist.
         fn appendNextOperation(self: *Self, comptime operation: Operation, comptime component: PoolComponent, previous_operation_index: ?u32, component_index: ?ComponentIndex) !u32 {
             const pend_op_idx = self.pending_operations.items.len;
 
@@ -202,9 +220,10 @@ pub fn OperationManager(comptime TAG: PR.Enum) type {
             };
 
             try self.pending_operations.append(self.allocator, pend_op);
-            if (previous_operation_index) |previous_index| {
-                self.pending_operations.items[previous_index].next_op = @intCast(pend_op_idx);
-            }
+            
+            // If a previous operation for that entity exists, update it's next_op field to maintain a linked-list
+            if (previous_operation_index) |prev_idx| self.pending_operations.items[prev_idx].next_op = @intCast(pend_op_idx);
+            
 
             return @intCast(pend_op_idx);
         }
@@ -214,6 +233,8 @@ pub fn OperationManager(comptime TAG: PR.Enum) type {
 ///Begining to wonder if EntityRecords are uncessary at this point... makes sense when one ent can own one component, 
 /// but with this operation queue, many ents can have many of the same components.  And their location is already being handled in a linked list
 /// Could be useful for "collapsing" the operations.
+/// 
+/// Next step is omitting the EntityRecords list and creating a flush mechanism.  The first focus will just be to just resolve entity operations
 
 const testing = std.testing;
 test "Start" {
