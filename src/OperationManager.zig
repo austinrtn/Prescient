@@ -24,6 +24,8 @@ const Operation = enum(u8) {
 };
 
 const PendingEntity = struct {
+    const Self = @This();
+
     create: bool = false,
     delete: bool = false,
 
@@ -31,6 +33,16 @@ const PendingEntity = struct {
     last_op: ?u32 = null,
 
     record_index: RecordIndex,
+
+    /// Sets the last operation to the index argument.  
+    /// Also sets the first operation if field is null
+    fn setNextOp(self: *Self, index: u32) void {
+        if(self.first_op == null) {
+            self.first_op = index;
+        }
+        
+        self.last_op = index;
+    }
 };
 
 pub fn OperationManager(comptime TAG: PR.Enum) type {
@@ -46,7 +58,7 @@ pub fn OperationManager(comptime TAG: PR.Enum) type {
 
     const PendingOperation = struct {
         operation: Operation,
-        component: PoolComponent,
+        component: ?PoolComponent,
         component_index: ?ComponentIndex = null,
         next_op: ?u32 = null,
     };
@@ -98,8 +110,22 @@ pub fn OperationManager(comptime TAG: PR.Enum) type {
             const entity_record = &self.entity_records.items[pending_entity.record_index.idx()];  
 
             switch (operation) {
-                .createEnt, .addComp => {
-                    try self.appendAddPendingOperation(operation, component_data, pending_entity, entity_record);
+                .createEnt, .addComp => |op| {
+                    // CreateEnt PendingOperations are simple and don't carry component data
+                    if(op == .createEnt) {
+                        pending_entity.setNextOp(
+                            try self.appendNextOperation(
+                                .createEnt,
+                                null,
+                                null,
+                                null,
+                            )
+                        );
+                    }
+                    
+                    // Since appendOperation function calls can still carry data regardless if it is createEnt or addComp 
+                    // operations, this function is called for both operations
+                    try self.appendAddPendingOperation(component_data, pending_entity, entity_record);
                 },
                 else => {},
             }
@@ -115,11 +141,8 @@ pub fn OperationManager(comptime TAG: PR.Enum) type {
         /// Where compoent and entity data goes when component data is being *added* to the queue.  
         /// Loops through each entity field / component, appends each component to the data base, 
         /// and records each operation individually.
-        fn appendAddPendingOperation(self: *Self, comptime operation: Operation, component_data: anytype, pending_entity: *PendingEntity, entity_record: *EntityRecord) !void {
+        fn appendAddPendingOperation(self: *Self, component_data: anytype, pending_entity: *PendingEntity, entity_record: *EntityRecord) !void {
             const EntType = @TypeOf(component_data);
-            // Get last operation and check to see if this is the entity's first operation in this manager state
-            var last_operation_index = pending_entity.last_op;
-            var ents_first_op = (pending_entity.first_op == null);
             
             // Each EntType field represents a component that will be queued / flushed.  
             inline for(std.meta.fields(EntType)) |field| {
@@ -127,21 +150,16 @@ pub fn OperationManager(comptime TAG: PR.Enum) type {
                 const comp_val = @field(component_data, field.name);
                 const comp_idx = try self.appendPendingComponent(comp, comp_val); // Where pending component data will be stored
 
-                const operation_index = try self.appendNextOperation(
-                    operation,
-                    comp,
-                    last_operation_index,
-                    comp_idx,
+                pending_entity.setNextOp(
+                    try self.appendNextOperation(
+                        .addComp,
+                        comp,
+                        pending_entity.last_op,
+                        comp_idx,
+                    )
                 );
                 
-                pending_entity.last_op = operation_index; // Track Pending Entity's last operation
-                last_operation_index = operation_index;
                 entity_record.setComponentIndex(comp, comp_idx);
-
-                if (ents_first_op) {
-                    pending_entity.first_op = operation_index;
-                    ents_first_op = false;
-                }
             }
         }
 
@@ -209,7 +227,7 @@ pub fn OperationManager(comptime TAG: PR.Enum) type {
         }
 
         /// Creates a new PendingOperation instance and appends it to the pending_operations arraylist.
-        fn appendNextOperation(self: *Self, comptime operation: Operation, comptime component: PoolComponent, previous_operation_index: ?u32, component_index: ?ComponentIndex) !u32 {
+        fn appendNextOperation(self: *Self, comptime operation: Operation, comptime component: ?PoolComponent, previous_operation_index: ?u32, component_index: ?ComponentIndex) !u32 {
             const pend_op_idx = self.pending_operations.items.len;
 
             const pend_op: PendingOperation = .{
@@ -315,12 +333,16 @@ test "Start" {
         \\
     , .{});
     for (op_manager.pending_operations.items, 0..) |pending_operation, operation_index| {
+        const component_name = if (pending_operation.component) |component|
+            @tagName(component)
+        else
+            "-";
         std.debug.print(
             "| {d: >5} | {s: <10} | {s: <9} | ",
             .{
                 operation_index,
                 @tagName(pending_operation.operation),
-                @tagName(pending_operation.component),
+                component_name,
             },
         );
         if (pending_operation.component_index) |component_index| {
