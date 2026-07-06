@@ -9,6 +9,7 @@ const EntityRecordType = @import("EntityRecord.zig").EntityRecord;
 const EntityId = Registry.EntityId;
 const RecordIndex = Registry.RecordIndex;
 const GroupIndex = Registry.GroupIndex;
+const OperationIndex = Registry.OperationIndex;
 const PendingEntityIndex = Registry.PendingEntityIndex;
 
 const ArrayList = std.ArrayList;
@@ -29,19 +30,16 @@ const PendingEntity = struct {
     create: bool = false,
     delete: bool = false,
 
-    first_op: ?u32 = null,
-    last_op: ?u32 = null,
+    first_op: ?OperationIndex = null,
+    last_op: ?OperationIndex= null,
 
     record_index: RecordIndex,
 
     /// Sets the last operation to the index argument.  
     /// Also sets the first operation if field is null
-    fn setNextOp(self: *Self, index: u32) void {
-        if(self.first_op == null) {
-            self.first_op = index;
-        }
-        
-        self.last_op = index;
+    fn setNextOp(self: *Self, operation_index: OperationIndex) void {
+        if(self.first_op == null) self.first_op = operation_index;
+        self.last_op = operation_index;
     }
 };
 
@@ -127,15 +125,13 @@ pub fn OperationManager(comptime TAG: PR.Enum) type {
                     // operations, this function is called for both operations
                     try self.appendAddPendingOperation(component_data, pending_entity, entity_record);
                 },
-                else => {},
+                .removeComp => {
+                    try self.appendRemovePendingOperation(component_data, pending_entity);
+                },
+                .deleteEnt => {
+
+                },
             }
-            //     .removeComp => {
-
-            //     },
-            //     .deleteEnt => {
-
-            //     },
-            // }
         }
 
         /// Where compoent and entity data goes when component data is being *added* to the queue.  
@@ -160,6 +156,19 @@ pub fn OperationManager(comptime TAG: PR.Enum) type {
                 );
                 
                 entity_record.setComponentIndex(comp, comp_idx);
+            }
+        }
+
+        fn appendRemovePendingOperation(self: *Self, components: []const PoolComponent, pending_entity: *PendingEntity) !void {
+            for(components) |comp| {
+                const next_op = try self.appendNextOperation(
+                    .removeComp,
+                    comp, 
+                    pending_entity.last_op, 
+                    null,
+                );
+                
+                pending_entity.setNextOp(next_op);
             }
         }
 
@@ -227,7 +236,7 @@ pub fn OperationManager(comptime TAG: PR.Enum) type {
         }
 
         /// Creates a new PendingOperation instance and appends it to the pending_operations arraylist.
-        fn appendNextOperation(self: *Self, comptime operation: Operation, comptime component: ?PoolComponent, previous_operation_index: ?u32, component_index: ?ComponentIndex) !u32 {
+        fn appendNextOperation(self: *Self, comptime operation: Operation, component: ?PoolComponent, previous_operation_index: ?OperationIndex, component_index: ?ComponentIndex) !OperationIndex {
             const pend_op_idx = self.pending_operations.items.len;
 
             const pend_op: PendingOperation = .{
@@ -240,10 +249,10 @@ pub fn OperationManager(comptime TAG: PR.Enum) type {
             try self.pending_operations.append(self.allocator, pend_op);
             
             // If a previous operation for that entity exists, update it's next_op field to maintain a linked-list
-            if (previous_operation_index) |prev_idx| self.pending_operations.items[prev_idx].next_op = @intCast(pend_op_idx);
+            if (previous_operation_index) |prev_idx| self.pending_operations.items[prev_idx.idx()].next_op = @intCast(pend_op_idx);
             
 
-            return @intCast(pend_op_idx);
+            return .init(pend_op_idx);
         }
     };
 }
@@ -281,6 +290,7 @@ test "Start" {
     try op_manager.appendOperation(.createEnt, ent, record_data);
 
     try op_manager.appendOperation(.addComp, .{.foo = 12,}, record_data);
+    try op_manager.appendOperation(.removeComp, &.{.foo}, record_data);
 
     try testing.expectEqual(@as(usize, 2), op_manager.pending_entity_groups.count());
     try testing.expectEqual(@as(usize, 2), op_manager.pending_entity_indices.count());
@@ -310,13 +320,13 @@ test "Start" {
                 },
             );
             if (pending_entity.first_op) |first_op| {
-                std.debug.print("{d: >8}", .{first_op});
+                std.debug.print("{d: >8}", .{first_op.val});
             } else {
                 std.debug.print("{s: >8}", .{"-"});
             }
             std.debug.print(" | ", .{});
             if (pending_entity.last_op) |last_op| {
-                std.debug.print("{d: >7}", .{last_op});
+                std.debug.print("{d: >7}", .{last_op.val});
             } else {
                 std.debug.print("{s: >7}", .{"-"});
             }
