@@ -40,6 +40,20 @@ pub fn EntityRecord(comptime TAG: PR.Enum) type {
             return self;
         }
 
+        /// Init a new EntityRecord without record data.  
+        // WARNING: Fields entity_id, groupd_index_member_index, and record_index with the return struct will be undefined
+        pub fn initNoRecordData() Self {
+            var self: Self = .{
+                .entity_id = undefined,
+                .group_index = undefined,
+                .member_index = undefined,
+                .record_index = undefined,
+                .inner_record = undefined,
+            };
+            inline for (Config.ComponentTags) |comp| @field(self.inner_record, @tagName(comp)) = null;
+            return self;
+        }
+
         pub fn setComponentIndex(self: *Self, comptime component: PoolComponent, component_index: anytype) void {
             const typeOf = @TypeOf(component_index);
             const info = @typeInfo(typeOf);
