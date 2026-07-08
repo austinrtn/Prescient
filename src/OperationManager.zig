@@ -44,13 +44,8 @@ const PendingEntity = struct {
 pub fn OperationManager(comptime TAG: PR.Enum) type {
     const Config = PR.GetPoolConfig(TAG);
     const PoolComponent = Config.Component;
-    //const Global = Config.globalize;
-
-    const Storage = ComponentStorage(TAG);
     const EntityRecord = EntityRecordType(TAG);
     const RecordData = EntityRecord.RecordData;
-    const PendingEntityIndexMap = HashMapType(EntityId, PendingEntityIndex);
-    const PendingEntityGroupMap = HashMapType(GroupIndex, ArrayList(PendingEntity));
 
     const PendingOperation = struct {
         operation: Operation,
@@ -58,6 +53,15 @@ pub fn OperationManager(comptime TAG: PR.Enum) type {
         component_index: ?ComponentIndex = null,
         next_op: ?OperationIndex = null,
     };
+
+    const PendingEntityData = struct {
+        pending_entity: PendingEntity,
+        record_data: RecordData,
+    };
+
+    const Storage = ComponentStorage(TAG);
+    const PendingEntityMap = HashMapType(EntityId, PendingEntityIndex);
+    const PendingEntityGroupMap = HashMapType(GroupIndex, ArrayList(PendingEntityData));
 
     return struct {
         const Self = @This();
@@ -67,10 +71,9 @@ pub fn OperationManager(comptime TAG: PR.Enum) type {
         /// Functionally stores pending entity data, separated by component compisistion
         pending_entity_groups: PendingEntityGroupMap = .empty,
 
-        /// Stores an index to where the PendingEntity struct exist within pending_entity_groups group list using Entity ID as the key.
-        /// Requires record data / group index to look up which group list it exist within
-        /// Used to retrieve PendingEntity data durring staging phase of the OperationManager
-        pending_entity_indices: PendingEntityIndexMap = .empty,
+        /// Uses EntityID to lookup PendingEntityData instance that contains both the location of
+        /// the pending_entity and record data structs.
+        pending_entity_indices: PendingEntityMap = .empty,
 
         /// A linear arraylist that contains all Pending operations
         pending_operations: ArrayList(PendingOperation) = .empty,
@@ -99,7 +102,7 @@ pub fn OperationManager(comptime TAG: PR.Enum) type {
 
         /// The main control flow for entity-component data being added to the queue.
         pub fn appendOperation(self: *Self, comptime operation: Operation, component_data: anytype, record_data: EntityRecord.RecordData) !void {
-            const pending_entity = try self.getOrSetPendingEntity(record_data, operation);
+            const pending_entity = try self.getOrSetPendingEntityData(record_data, operation);
 
             switch (operation) {
                 .createEnt, .addComp => |op| {
@@ -166,7 +169,7 @@ pub fn OperationManager(comptime TAG: PR.Enum) type {
         }
 
         ///Puts or retrives a new GroupHashMap key / value.  Stores group index as key and PendingEntity group [*ArrayList(PendingEntity)] as value
-        fn getOrSetPendingEntityGroup(self: *Self, group_index: GroupIndex) !*ArrayList(PendingEntity) {
+        fn getOrSetPendingEntityGroup(self: *Self, group_index: GroupIndex) !*ArrayList(PendingEntityData) {
             const res = try self.pending_entity_groups.getOrPut(self.allocator, group_index);
             if (!res.found_existing) res.value_ptr.* = .empty;
 
@@ -174,40 +177,43 @@ pub fn OperationManager(comptime TAG: PR.Enum) type {
         }
 
         ///Puts or retrives a new PendingEntity key / value.  Stores HashMap as key and PendingEntity instance as value.
-        fn getOrSetPendingEntity(self: *Self, record_data: RecordData, operation: Operation) !*PendingEntity {
-            // If the entity has already exists within the operation manager...
-            if (self.pending_entity_indices.get(record_data.entity_id)) |pending_entity_index| {
+        fn getOrSetPendingEntityData(self: *Self, record_data: RecordData, operation: Operation) !*PendingEntity {
+            // If the entity already exists within the operation manager...
+
+            if (self.pending_entity_indices.get(record_data.entity_id)) |pend_ent_idx| {
+
                 // Get the group arraylist that the PendingEntity data should exist within
                 const group = self.pending_entity_groups.getPtr(record_data.group_index).?;
-                std.debug.assert(pending_entity_index.idx() < group.items.len);
+                const pend_ent_data = &group.items[pend_ent_idx.idx()];
+                const pend_ent = &pend_ent_data.pending_entity;
 
-                const pending_entity = &group.items[pending_entity_index.idx()];
+                std.debug.assert(pend_ent_idx.idx() < group.items.len);
+                std.debug.assert(std.meta.eql(pend_ent_data.record_data, record_data));
 
-                pending_entity.create = (pending_entity.create or operation == .createEnt);
-                pending_entity.delete = (pending_entity.delete or operation == .deleteEnt);
-                return pending_entity;
+                pend_ent.create = (pend_ent.create or operation == .createEnt);
+                pend_ent.delete = (pend_ent.delete or operation == .deleteEnt);
+                return pend_ent;
             }
-
             // If the entity does not yet exist within the operation manager
             // Create a new PendingEntity instance as well as PendingEntityIndex
             // and add it to the operation manager
             const group = try self.getOrSetPendingEntityGroup(record_data.group_index);
-            const pending_entity_index: PendingEntityIndex = .init(group.items.len);
-            const pending_entity: PendingEntity = .{
+            const pend_ent_idx: PendingEntityIndex = .init(group.items.len);
+            const pend_ent: PendingEntity = .{
                 .create = (operation == .createEnt),
                 .delete = (operation == .deleteEnt),
             };
 
-            try group.append(self.allocator, pending_entity);
+            try group.append(self.allocator, .{ .pending_entity = pend_ent, .record_data = record_data });
             errdefer _ = group.pop();
 
             try self.pending_entity_indices.put(
                 self.allocator,
                 record_data.entity_id,
-                pending_entity_index,
+                pend_ent_idx,
             );
 
-            return &group.items[pending_entity_index.idx()];
+            return &group.items[pend_ent_idx.idx()].pending_entity;
         }
 
         /// Add component data to the OperationManager, pending for flush
@@ -241,9 +247,9 @@ pub fn OperationManager(comptime TAG: PR.Enum) type {
         }
 
         pub fn flush(self: *Self) !void {
-            const ArchPool = @import("ArchetypePool.zig").ArchetypePool(tag);
+            const ArchPool = @import("ArchetypePool.zig").ArchetypePool(TAG);
             const allocator = testing.allocator;
-        
+
             var pool: ArchPool = .init(allocator);
             for (self.pending_entity_groups.values()) |group| {
                 for (group.items) |pend_ent| {
@@ -255,7 +261,7 @@ pub fn OperationManager(comptime TAG: PR.Enum) type {
                         switch(next_op.operation) {
                             .createEnt => {
                                 // I'm going to need to store the RecordData index alongside the pend ent index
-                                try pool.addEnt(.{}, entity_id: TypedIndex(u32))
+                                // try pool.addEnt(.{}, entity_id: TypedIndex(u32))
                             },
                         }
                         next_op_idx = next_op.next_op orelse break;
@@ -304,7 +310,7 @@ test "Start" {
     try op_manager.appendOperation(.addComp, .{
         .foo = 12,
     }, record_data);
-    try op_manager.appendOperation(.removeComp, &.{.foo, .id}, record_data);
+    try op_manager.appendOperation(.removeComp, &.{ .foo, .id }, record_data);
     try op_manager.appendOperation(.deleteEnt, null, record_data);
 
     try testing.expectEqual(@as(usize, 2), op_manager.pending_entity_groups.count());
@@ -321,16 +327,23 @@ test "Start" {
         \\
     , .{});
     for (op_manager.pending_entity_groups.keys(), op_manager.pending_entity_groups.values()) |group_index, pending_entities| {
-        for (pending_entities.items, 0..) |pending_entity, pending_entity_index| {
+        for (pending_entities.items, 0..) |pending_entity_data, pending_entity_index| {
+            const pending_entity = pending_entity_data.pending_entity;
+            const record_data_stored = pending_entity_data.record_data;
+
             std.debug.print(
-                "| {d: >6} | {d: >6} | {any: >6} | {any: >6} | ",
+                "|{d: >6} |{d: >6} | {any: >6} | {any: >6} | ",
                 .{
                     group_index.val,
                     pending_entity_index,
-                    pending_entity.create,
-                    pending_entity.delete,
+                    record_data_stored.entity_id.val,
+                    record_data_stored.record_index.val,
                 },
             );
+            std.debug.print("{any: >6} | {any: >6} | ", .{
+                pending_entity.create,
+                pending_entity.delete,
+            });
             if (pending_entity.first_op) |first_op| {
                 std.debug.print("{d: >8}", .{first_op.val});
             } else {
