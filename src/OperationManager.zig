@@ -251,19 +251,29 @@ pub fn OperationManager(comptime TAG: PR.Enum) type {
             const allocator = testing.allocator;
 
             var pool: ArchPool = .init(allocator);
+            _ = &pool;
+
             for (self.pending_entity_groups.values()) |group| {
-                for (group.items) |pend_ent| {
+                for (group.items) |pend_ent_data| {
+                    const pend_ent = &pend_ent_data.pending_entity;
+                    const record_data = pend_ent_data.record_data;
+
                     var next_op_idx = pend_ent.first_op orelse continue;
-                    var ent_record: EntityRecord = .initNoRecordData();
+                    var ent_record: EntityRecord = try .init(self.allocator, record_data);
+                    defer ent_record.deinit();
                     _ = &ent_record;
                     while (true) {
                         const next_op = self.pending_operations.items[next_op_idx.idx()];
-                        switch(next_op.operation) {
-                            .createEnt => {
-                                // I'm going to need to store the RecordData index alongside the pend ent index
-                                // try pool.addEnt(.{}, entity_id: TypedIndex(u32))
+
+                        if (next_op.component) |component| switch (component) {
+                            inline else => |comp| {
+                                switch (next_op.operation) {
+                                    .addComp => ent_record.setComponentIndex(comp, next_op.component_index.?),
+                                    else => {},
+                                }
                             },
-                        }
+                        };
+
                         next_op_idx = next_op.next_op orelse break;
                     }
                 }
@@ -285,6 +295,7 @@ test "Start" {
     const allocator = testing.allocator;
 
     var pool: ArchPool = .init(allocator);
+    defer pool.deinit();
 
     var op_manager: OperationManager(tag) = .init(allocator, &pool);
     defer op_manager.deinit();
@@ -317,6 +328,8 @@ test "Start" {
     try testing.expectEqual(@as(usize, 2), op_manager.pending_entity_indices.count());
     try testing.expectEqual(@as(usize, 0), op_manager.pending_entity_indices.get(.init(0)).?.idx());
     try testing.expectEqual(@as(usize, 0), op_manager.pending_entity_indices.get(.init(1)).?.idx());
+
+    try op_manager.flush();
 
     std.debug.print(
         \\

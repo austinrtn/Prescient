@@ -20,15 +20,18 @@ pub fn EntityRecord(comptime TAG: PR.Enum) type {
         };
 
         pub const Self = @This();
+        allocator: std.mem.Allocator,
         entity_id: EntityId,
         group_index: GroupIndex,
         member_index: MemberIndex,
         record_index: RecordIndex,
         inner_record: InnerEntRecord = undefined,
+        set_components: std.ArrayList(ComponentIndex) = .empty,
 
         /// Init a new EntityRecord struct with each component index being set to null
-        pub fn init(record_data: RecordData) Self {
+        pub fn init(allocator: std.mem.Allocator, record_data: RecordData) !Self {
             var self: Self = .{
+                .allocator = allocator,
                 .entity_id = record_data.entity_id,
                 .group_index = record_data.group_index,
                 .member_index = record_data.member_index,
@@ -36,31 +39,23 @@ pub fn EntityRecord(comptime TAG: PR.Enum) type {
                 .inner_record = undefined,
             };
 
+            try self.set_components.ensureTotalCapacity(self.allocator, Config.ComponentTags.len);
+
             inline for (Config.ComponentTags) |comp| @field(self.inner_record, @tagName(comp)) = null;
             return self;
         }
 
-        /// Init a new EntityRecord without record data.  
-        // WARNING: Fields entity_id, groupd_index_member_index, and record_index with the return struct will be undefined
-        pub fn initNoRecordData() Self {
-            var self: Self = .{
-                .entity_id = undefined,
-                .group_index = undefined,
-                .member_index = undefined,
-                .record_index = undefined,
-                .inner_record = undefined,
-            };
-            inline for (Config.ComponentTags) |comp| @field(self.inner_record, @tagName(comp)) = null;
-            return self;
+        pub fn deinit(self: *Self) void {
+            self.set_components.deinit(self.allocator);
+            self.set_components = .empty;
         }
 
         pub fn setComponentIndex(self: *Self, comptime component: PoolComponent, component_index: anytype) void {
-            const typeOf = @TypeOf(component_index);
-            const info = @typeInfo(typeOf);
-            
-            if(typeOf == ComponentIndex) @field(self.inner_record, @tagName(component)) = component_index
-            else if(info == .int) @field(self.inner_record, @tagName(component)) = ComponentIndex.init(component_index)
-            else unreachable;
+            const typeOfCompIdx = @TypeOf(component_index);
+            const compIdxInfo = @typeInfo(typeOfCompIdx);
+            const field = &@field(self.inner_record, @tagName(component));
+
+            if (compIdxInfo == .optional and component_index == null) field.* = null else if (typeOfCompIdx == ComponentIndex) field.* = component_index else if (compIdxInfo == .int) field.* = ComponentIndex.init(component_index) else unreachable;
         }
 
         pub fn getComponentIndex(self: Self, comptime component: PoolComponent) ?ComponentIndex {

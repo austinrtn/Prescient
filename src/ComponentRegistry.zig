@@ -181,6 +181,7 @@ pub fn ComponentRegistryT(comptime comp_descs: []const ComponentDesc) type {
 
             return build;
         }
+
     };
 }
 

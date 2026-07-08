@@ -125,6 +125,9 @@ the code.  You will also be asked to take stock in the project size from time to
 how many code instructions there are (determined by semicolon), lines of code generally (with and without 
 counting breaklines), switch statements, loops, and comptime generated instructions.
 
+Use zig build test to make sure the project stays working after making changes.  This is the best way to propegate all potential errors.
+Also print statements often generate an error when running zig build test 
+
 # Naming and API conventions
 - When a function requires Registry.EntityID as a parameter, it should be the first paramter in the function
 - Function parameters should not have shortened / abrivated variable names, but the actual variable names within the functions are encouraged to be abriavated to save space
