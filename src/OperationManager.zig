@@ -259,8 +259,7 @@ pub fn OperationManager(comptime TAG: PR.Enum) type {
                     const record_data = pend_ent_data.record_data;
 
                     var next_op_idx = pend_ent.first_op orelse continue;
-                    var ent_record: EntityRecord = try .init(self.allocator, record_data);
-                    defer ent_record.deinit();
+                    var ent_record: EntityRecord = .init(record_data);
                     _ = &ent_record;
                     while (true) {
                         const next_op = self.pending_operations.items[next_op_idx.idx()];

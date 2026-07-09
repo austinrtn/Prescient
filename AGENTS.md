@@ -126,7 +126,8 @@ how many code instructions there are (determined by semicolon), lines of code ge
 counting breaklines), switch statements, loops, and comptime generated instructions.
 
 Use zig build test to make sure the project stays working after making changes.  This is the best way to propegate all potential errors.
-Also print statements often generate an error when running zig build test 
+Also print statements often generate an error that says `failed command ./zig-cache...` despite the project building and all test passing.  
+This error is not problematic and is to be ignored.
 
 # Naming and API conventions
 - When a function requires Registry.EntityID as a parameter, it should be the first paramter in the function

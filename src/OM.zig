@@ -49,9 +49,6 @@ pub fn OperationManager(comptime PoolComponent: type) type {
 
         pub fn deinit(self: *Self) void {
             self.storage.deinit();
-            for (self.entity_records.items) |*entity_record| {
-                entity_record.deinit();
-            }
             self.entity_records.deinit(self.allocator);
             for (self.pending_operations.values()) |*list| list.deinit(self.allocator);
             self.pending_operations.deinit(self.allocator);
@@ -59,8 +56,7 @@ pub fn OperationManager(comptime PoolComponent: type) type {
 
         pub fn addOperation(self: *Self, comptime operation: Operation, component_data: anytype, record_data: EntityRecord.RecordData) !void {
             const ent_id = record_data.entity_id;
-            var ent_record: EntityRecord = try .init(self.allocator, record_data);
-            errdefer ent_record.deinit();
+            var ent_record: EntityRecord = .init(record_data);
 
             // If not adding an ent for creation,
             if (comptime operation != .addEnt) {

@@ -75,9 +75,6 @@ pub fn SparseSetPool(comptime TAG: PR.Enum) type {
         }
 
         pub fn deinit(self: *Self) void {
-            for (self.entity_records.items) |*entity_record| {
-                entity_record.deinit();
-            }
             self.entity_records.deinit(self.allocator);
             inline for (StorageFields) |field| {
                 @field(self.comp_storage, field.name).deinit(self.allocator);
@@ -101,13 +98,12 @@ pub fn SparseSetPool(comptime TAG: PR.Enum) type {
             try group.append(self.allocator, record_idx);
             errdefer _ = group.pop();
 
-            var ent_record: EntityRecord = try .init(self.allocator, .{
+            var ent_record: EntityRecord = .init(.{
                 .entity_id = entity_id,
                 .group_index = val.group_index,
                 .member_index = member_idx,
                 .record_index = record_idx,
             });
-            errdefer ent_record.deinit();
 
             inline for (std.meta.fields(EntType)) |field| {
                 const comp_tag = comptime std.meta.stringToEnum(PoolComponent, field.name) orelse unreachable;
@@ -161,7 +157,6 @@ pub fn SparseSetPool(comptime TAG: PR.Enum) type {
             };
 
             _ = group.swapRemove(member_index.idx());
-            ent_record.deinit();
             self.count -= 1;
             return swapped_ent_id;
         }
