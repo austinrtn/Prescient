@@ -1,4 +1,5 @@
 const std = @import("std");
+const TestPackage = @import("TestInstance.zig").GetPkg;
 const PR = @import("PoolRegistry.zig").PoolRegistry;
 const Registry = @import("Registry.zig").Registry;
 const EntityId = Registry.EntityId;
@@ -75,9 +76,9 @@ pub fn EntityRecord(comptime TAG: PR.Enum) type {
 
             //      0    1    2    3   [count: 4]   4      5     6
             //<SET>pos, foo, bar, vel</SET><UNSET>color, shape, size,
-            
+
             if (compIdxInfo == .optional and component_index == null) {
-                if(field.* != null) {
+                if (field.* != null) {
                     const idx = std.mem.findScalar(component, self.set_components, component) orelse unreachable;
                     self.set_components[idx] = self.set_components[self.set_count - 1];
                     self.count -= 1;
@@ -85,11 +86,11 @@ pub fn EntityRecord(comptime TAG: PR.Enum) type {
 
                 field.* = null;
             } else {
-                if(field.* == null) {
+                if (field.* == null) {
                     self.set_components[self.set_count] = component;
                     self.set_count += 1;
                 }
-                
+
                 if (typeOfCompIdx == ComponentIndex) {
                     field.* = component_index;
                 } else if (compIdxInfo == .int) {
@@ -150,4 +151,11 @@ fn InnerEntityRecord(comptime TAG: PR.Enum) type {
         &types,
         &attrs,
     );
+}
+
+test "EntityRecord" {
+    const prescient, const arch_pool, _, _, _ = try TestPackage();
+    
+    defer prescient.deinit();
+    _ = arch_pool;
 }

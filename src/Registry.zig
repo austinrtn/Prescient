@@ -19,7 +19,7 @@ pub const Registry = struct {
         },
         .{
             .name = "sparse_set",
-            .components = &.{ .pos, .vel, .id },
+            .components = &.{ .pos, .vel, .id, .foo, },
             .storage_strategy = .sparse_set,
         },
     };
