@@ -73,16 +73,18 @@ pub fn EntityRecord(comptime TAG: PR.Enum) type {
             const compIdxInfo = @typeInfo(typeOfCompIdx);
             const field = &@field(self.inner_record, @tagName(component));
 
+            //      0    1    2    3   [count: 4]   4      5     6
+            //<SET>pos, foo, bar, vel</SET><UNSET>color, shape, size,
+            
             if (compIdxInfo == .optional and component_index == null) {
                 if(field.* != null) {
                     const idx = std.mem.findScalar(component, self.set_components, component) orelse unreachable;
-                    self.set_components[idx] = self.set_components[self.set_components.len - 1];
+                    self.set_components[idx] = self.set_components[self.set_count - 1];
                     self.count -= 1;
                 }
-                
+
                 field.* = null;
-            } 
-            else {
+            } else {
                 if(field.* == null) {
                     self.set_components[self.set_count] = component;
                     self.set_count += 1;
@@ -100,6 +102,13 @@ pub fn EntityRecord(comptime TAG: PR.Enum) type {
 
         pub fn getComponentIndex(self: Self, comptime component: PoolComponent) ?ComponentIndex {
             return @field(self.inner_record, @tagName(component));
+        }
+
+        pub fn iter(self: *Self) SetComponentIterator {
+            return .{
+                .set_components = self.set_components,
+                .set_count = self.set_count,
+            };
         }
     };
 }

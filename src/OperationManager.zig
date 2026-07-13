@@ -260,7 +260,7 @@ pub fn OperationManager(comptime TAG: PR.Enum) type {
 
                     var next_op_idx = pend_ent.first_op orelse continue;
                     var ent_record: EntityRecord = .init(record_data);
-                    _ = &ent_record;
+                    
                     while (true) {
                         const next_op = self.pending_operations.items[next_op_idx.idx()];
 
@@ -275,6 +275,9 @@ pub fn OperationManager(comptime TAG: PR.Enum) type {
 
                         next_op_idx = next_op.next_op orelse break;
                     }
+
+                    var iter = ent_record.iter();
+                    while(iter.next()) |comp| std.debug.print("{s}\n", .{@tagName(comp)});
                 }
             }
         }
