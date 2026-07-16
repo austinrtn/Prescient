@@ -1,5 +1,6 @@
 const std = @import("std");
-const TestPackage = @import("TestInstance.zig").GetPkg;
+const testing = std.testing;
+const initTestPackage = @import("TestInstance.zig").initTestPackage;
 const PR = @import("PoolRegistry.zig").PoolRegistry;
 const Registry = @import("Registry.zig").Registry;
 const EntityId = Registry.EntityId;
@@ -27,8 +28,8 @@ pub fn EntityRecord(comptime TAG: PR.Enum) type {
                 self.reset();
                 return null;
             } else {
-                defer self.index += 1;
-                return self.set_components[self.index];
+                self.index += 1;
+                return self.set_components[self.index - 1];
             }
         }
 
@@ -93,7 +94,7 @@ pub fn EntityRecord(comptime TAG: PR.Enum) type {
 
                 if (typeOfCompIdx == ComponentIndex) {
                     field.* = component_index;
-                } else if (compIdxInfo == .int) {
+                } else if (compIdxInfo == .int or compIdxInfo == .comptime_int) {
                     field.* = ComponentIndex.init(component_index);
                 } else {
                     @compileError("setComponentIndex expected null, ComponentIndex, or an integer index");
@@ -154,8 +155,15 @@ fn InnerEntityRecord(comptime TAG: PR.Enum) type {
 }
 
 test "EntityRecord" {
-    const prescient, const arch_pool, _, _, _ = try TestPackage();
-    
-    defer prescient.deinit();
-    _ = arch_pool;
+    const test_pkg = try initTestPackage();
+    const EntRecord: type = EntityRecord(.archetype);
+    const record_data = EntRecord.RecordData{.entity_id = .init(0), .group_index = .init(0), .member_index = .init(0), .record_index = .init(0) };
+
+    var ent_record: EntRecord = .init(record_data);
+    ent_record.setComponentIndex(.foo, 0);
+    ent_record.setComponentIndex(.pos, 3);
+    ent_record.setComponentIndex(.vel, 6);
+
+    try testing.expect(ent_record.set_count == 3);
+    try testing.expect(ent_record.set_components.len == test_pkg.arch_config.tags.len);
 }
